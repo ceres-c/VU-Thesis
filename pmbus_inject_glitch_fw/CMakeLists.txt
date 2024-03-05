@@ -47,6 +47,7 @@ pico_enable_stdio_uart(pmbus_inject_glitch_fw 0)
 target_link_libraries(pmbus_inject_glitch_fw
   pico_stdlib
   hardware_i2c
+  pico_i2c_slave
 )
 
 # Add the standard include files to the build
