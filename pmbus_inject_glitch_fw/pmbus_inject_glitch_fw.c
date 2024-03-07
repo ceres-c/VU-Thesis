@@ -146,21 +146,28 @@ void __not_in_flash_func(do_glitch)() {
 	 * when a trigger is forced with the serial command `T`, it runs on core0.
 	*/
 
-	// uint32_t ints = save_and_disable_interrupts();
-	if (i2c_sniff.value > TPS_VCORE_MAX) { // Makes things slower, but safer
+	uint32_t ints = save_and_disable_interrupts();
+	uint8_t glitch_val = glitch.reg_value;
+	uint8_t restore_val = i2c_sniff.value;
+	if (glitch_val > TPS_VCORE_MAX) { // Makes things slower, but safer
+		putchar(RESP_GLITCH_FAIL);
+		puts("Glitch value is unsafe. Ignoring");
+		return;
+	}
+	if (restore_val > TPS_VCORE_MAX) {
 		putchar(RESP_GLITCH_FAIL);
 		puts("Sniffed value is unsafe. Ignoring");
 		return;
 	}
-	uint8_t pmbus_cmd_glitch[TPS_WRITE_REG_CMD_LEN] = {TPS_VCORE_REG, glitch.reg_value};
-	uint8_t pmbus_cmd_restore[TPS_WRITE_REG_CMD_LEN] = {TPS_VCORE_REG, i2c_sniff.value};
+	uint8_t pmbus_cmd_glitch[TPS_WRITE_REG_CMD_LEN] = {TPS_VCORE_REG, glitch_val};
+	uint8_t pmbus_cmd_restore[TPS_WRITE_REG_CMD_LEN] = {TPS_VCORE_REG, restore_val};
 	busy_wait_us_32(glitch.ext_offset);
 	gpio_put(PMBUS_MASTER_OE_PIN, 1);
 	int write_glitch_res = i2c_write_timeout_us(pmbus_master_i2c, PMBUS_PMIC_ADDRESS, pmbus_cmd_glitch, TPS_WRITE_REG_CMD_LEN, true, 1000);
 	busy_wait_us_32(glitch.width);
 	int write_restore_res = i2c_write_timeout_us(pmbus_master_i2c, PMBUS_PMIC_ADDRESS, pmbus_cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 1000);
 	gpio_put(PMBUS_MASTER_OE_PIN, 0);
-	// restore_interrupts(ints);
+	restore_interrupts(ints);
 
 	if (write_glitch_res == PICO_ERROR_GENERIC | write_glitch_res == PICO_ERROR_TIMEOUT) {
 		putchar(RESP_GLITCH_FAIL);
