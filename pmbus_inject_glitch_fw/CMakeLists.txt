@@ -45,6 +45,7 @@ pico_enable_stdio_uart(pmbus_inject_glitch_fw 0)
 
 # Add the standard library to the build
 target_link_libraries(pmbus_inject_glitch_fw
+  pico_multicore
   pico_stdlib
   hardware_i2c
   pico_i2c_slave

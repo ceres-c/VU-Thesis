@@ -2,8 +2,8 @@
 
 #define TPS_VCORE_REG TPS_REG_BUCK2CTRL
 
-static i2c_sniff_data_t i2c_sniff = {.reg_address = 0, .reg_address_written = false, .value = 0xFF}; // 7th bit is never used
-static glitch_t glitch = {.ext_offset = 0, .width = 0};
+volatile static i2c_sniff_data_t i2c_sniff = {.reg_address = 0, .reg_address_written = false, .value = 0};
+volatile static glitch_t glitch = {.ext_offset = 0, .width = 0, .reg_value = 0};
 
 int main()
 {
@@ -16,30 +16,40 @@ int main()
 	i2c_init(pmbus_master_i2c, 1000000); // 1MHz
 	i2c_init(pmbus_slave_i2c, 1000000); // 1MHz
 	// configure I2C0 for slave mode
-	i2c_slave_init(pmbus_slave_i2c, PMBUS_PMIC_ADDRESS, &i2c_slave_handler);
-
-	uint8_t pmbus_cmd[2] = {0x00, 0x00};
-	pmbus_cmd[0] = TPS_VCORE_REG;
+	i2c_slave_init(pmbus_slave_i2c, PMBUS_PMIC_ADDRESS, &i2c_slave_recv_irq);
 
 	char cmd = 0;
 	while (1) {
 		cmd = getchar();
 		switch (cmd) {
-		case CMD_ARM: // TODO
-			// Wait for trigger
-			putchar(RESP_KO);
+		case CMD_ARM:
+			// Enable GPIO irq on core1 so that we are free to do other things here (i2c sniff irq, usb)
+			multicore_reset_core1();
+			multicore_launch_core1(glitch_gpio_trig_enable);
+			putchar(RESP_OK);
+			break;
+
+		case CMD_DISARM:
+			// Disable GPIO irq on core1
+			multicore_reset_core1();
+			multicore_launch_core1(glitch_gpio_trig_disable);
+			putchar(RESP_OK);
 			break;
 
 		case CMD_EXT_OFFSET:
-			fread(&glitch.ext_offset, sizeof(uint32_t), 1, stdin);
+			uint32_t new_offset;
+			fread(&new_offset, sizeof(uint32_t), 1, stdin);
+			glitch.ext_offset = new_offset; // fread is not volatile-safe
 			putchar(RESP_OK);
 
-		case CMD_WIDTH:
-			fread(&glitch.width, sizeof(uint32_t), 1, stdin);
+		case CMD_SET_GLITCH_WIDTH:
+			uint32_t new_width;
+			fread(&new_width, sizeof(uint32_t), 1, stdin);
+			glitch.width = new_width; // fread is not volatile-safe
 			putchar(RESP_OK);
 			break;
 
-		case CMD_VOLTAGE:
+		case CMD_SET_GLITCH_VOLTAGE:
 			// Set the target VCORE glitch voltage
 			uint8_t new_value;
 			fread(&new_value, sizeof(uint8_t), 1, stdin);
@@ -48,13 +58,17 @@ int main()
 				puts("[!] Value risks frying the CPU. Ignoring");
 				break;
 			}
-			glitch.voltage = new_value;
+			glitch.reg_value = new_value;
 			putchar(RESP_OK);
 			break;
 
-		case CMD_TRIGGER_USB: // TODO
+		case CMD_GET_GLITCH_VOLTAGE:
+			putchar(glitch.reg_value);
+			break;
+
+		case CMD_TRIGGER_USB:
 			// Force a trigger
-			putchar(RESP_KO);
+			do_glitch();
 			break;
 
 		case CMD_PING:
@@ -115,7 +129,15 @@ static void init_pins() {
 	gpio_set_dir(PMBUS_MASTER_OE_PIN, GPIO_OUT);
 }
 
-static void i2c_slave_handler(i2c_inst_t *i2c, i2c_slave_event_t event) {
+static void __not_in_flash_func(i2c_slave_recv_irq)(i2c_inst_t *i2c, i2c_slave_event_t event) {
+	/**
+	 * @brief I2C slave receive IRQ handler. Sniffs the I2C bus for the PMIC register writes
+	 * and stores the value in a global variable
+	 *
+	 * @param i2c The I2C instance
+	 * @param event The event that triggered the IRQ
+	 * 
+	*/
 	switch (event) {
 	case I2C_SLAVE_RECEIVE: // master has written some data
 		uint8_t byte_from_bus = i2c_read_byte_raw(i2c);
@@ -137,7 +159,46 @@ static void i2c_slave_handler(i2c_inst_t *i2c, i2c_slave_event_t event) {
 	}
 }
 
+void glitch_gpio_trig_enable() {
+	gpio_set_irq_enabled_with_callback(TRIGGER_IN_PIN, GPIO_IRQ_EDGE_RISE , true, &do_glitch);
+}
+void glitch_gpio_trig_disable() {
+	gpio_set_irq_enabled(TRIGGER_IN_PIN, GPIO_IRQ_EDGE_RISE, false);
+}
 
+void __not_in_flash_func(do_glitch)() {
+	/**
+	 * @brief Perform the glitch (can be registered as a GPIO irq callback)
+	*/
+
+	// TODO test I am actually running from core1 when called from the GPIO irq
+
+	if (i2c_sniff.value > TPS_VCORE_MAX) { // Makes things slower, but safer
+		putchar(RESP_GLITCH_FAIL);
+		puts("Sniffed value is unsafe. Ignoring");
+		return;
+	}
+	uint8_t pmbus_cmd_glitch[TPS_WRITE_REG_CMD_LEN] = {TPS_VCORE_REG, glitch.reg_value};
+	uint8_t pmbus_cmd_restore[TPS_WRITE_REG_CMD_LEN] = {TPS_VCORE_REG, i2c_sniff.value};
+	busy_wait_us_32(glitch.ext_offset);
+	gpio_put(PMBUS_MASTER_OE_PIN, 1);
+	int write_restore_res = 0, write_glitch_res = 0; // TODO remove
+	// int write_glitch_res = i2c_write_timeout_us(pmbus_master_i2c, PMBUS_PMIC_ADDRESS, pmbus_cmd_glitch, TPS_WRITE_REG_CMD_LEN, true, 1000);
+	printf("Glitching with value 0x%x\n", glitch.reg_value);
+	busy_wait_us_32(glitch.width);
+	// int write_restore_res = i2c_write_timeout_us(pmbus_master_i2c, PMBUS_PMIC_ADDRESS, pmbus_cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 1000);
+	printf("Restoring with value 0x%x\n", i2c_sniff.value);
+	gpio_put(PMBUS_MASTER_OE_PIN, 0);
+	if (write_glitch_res == PICO_ERROR_GENERIC | write_glitch_res == PICO_ERROR_TIMEOUT) {
+		putchar(RESP_GLITCH_FAIL);
+		printf("Error writing glitch voltage to I2C\n");
+	}
+	if (write_restore_res == PICO_ERROR_GENERIC | write_restore_res == PICO_ERROR_TIMEOUT) {
+		putchar(RESP_GLITCH_FAIL);
+		printf("Error restoring voltage to I2C\n");
+	}
+	putchar(RESP_GLITCH_SUCCESS);
+}
 
 // int32_t gen_pmic_cmd(char *cmd_string, uint8_t *pmic_cmd, uint32_t current_value) {
 // 	/**

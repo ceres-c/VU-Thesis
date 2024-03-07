@@ -7,14 +7,17 @@
 #include "pico/stdlib.h"
 #include "pico/stdio_usb.h"
 #include "pico/i2c_slave.h"
+#include "pico/multicore.h"
 #include "hardware/structs/xip_ctrl.h" // To disable cache
 #include "hardware/i2c.h"
 
 #define PMBUS_MASTER_OE_PIN			3 // Pin 5
+#define PMBUS_MASTER_OE_MASK		(1 << PMBUS_MASTER_OE_PIN)
 #define PMBUS_MASTER_SDA_PIN		4 // Pin 6
 #define PMBUS_MASTER_SCL_PIN		5 // Pin 7
 #define PMBUS_SLAVE_SDA_PIN			6 // Pin 9
 #define PMBUS_SLAVE_SCL_PIN			7 // Pin 10
+#define TRIGGER_IN_PIN				8 // Pin 11
 
 #define PMBUS_PMIC_ADDRESS			0x5E // Stated in the datasheet and confirmed sniffing the I2C bus
 
@@ -48,6 +51,8 @@
 #define TPS_REG_PWR_FAULT_STATUS2	0xB3
 #define TPS_REG_TEMPHOT				0xB5
 
+#define TPS_WRITE_REG_CMD_LEN		2
+
 #define pmbus_master_i2c			i2c0
 #define pmbus_slave_i2c				i2c1
 
@@ -59,16 +64,18 @@
 
 #define CMD_PING					'P'
 #define CMD_EXT_OFFSET				'E' // How long to wait before triggering the glitch after a trigger (uint32_t)
-#define CMD_WIDTH					'W' // The width of a single glitch pulse (uint32_t)
-#define CMD_VOLTAGE					'V' // The voltage to inject (uint8_t)
+#define CMD_SET_GLITCH_WIDTH		'W' // The width of a single glitch pulse (uint32_t)
+#define CMD_SET_GLITCH_VOLTAGE		'V' // The voltage to inject (uint8_t)
+#define CMD_GET_GLITCH_VOLTAGE		'v' // Get the current voltage read from the i2c bus (uint8_t)
 #define CMD_TRIGGER_USB				'T' // Force a trigger
 #define CMD_ARM						'A' // Arm the glitcher
+#define CMD_DISARM					'D' // Disarm the glitcher
 
 #define RESP_OK						'k'
 #define RESP_KO						'x'
 #define RESP_PONG					'p'
-#define RESP_GLITCH_FAIL			'.'
-#define RESP_GLITCH_WEIRD			'y' // Used when deviceID is wrong but nonzero
+#define RESP_GLITCH_SUCCESS			'!' // The glitch value was sent successfully
+#define RESP_GLITCH_FAIL			'.' // The glitch value was not sent successfully
 
 typedef struct i2c_sniff_data_s {
 	uint8_t reg_address;
@@ -79,11 +86,14 @@ typedef struct i2c_sniff_data_s {
 typedef struct glitch_s {
 	uint32_t ext_offset;
 	uint32_t width;
-	uint8_t voltage;
+	uint32_t reg_value;
 } glitch_t;
 
 static void init_pins();
-static void i2c_slave_handler(i2c_inst_t *i2c, i2c_slave_event_t event);
+static void __not_in_flash_func(i2c_slave_recv_irq)(i2c_inst_t *i2c, i2c_slave_event_t event);
+void glitch_gpio_trig_enable();
+void glitch_gpio_trig_disable();
+void do_glitch();
 
 inline uint8_t atou8(char *str, char *endptr) {
 	/**
