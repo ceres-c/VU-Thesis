@@ -66,7 +66,7 @@
 #define CMD_EXT_OFFSET				'E' // How long to wait before triggering the glitch after a trigger (uint32_t)
 #define CMD_SET_GLITCH_WIDTH		'W' // The width of a single glitch pulse (uint32_t)
 #define CMD_SET_GLITCH_VOLTAGE		'V' // The voltage to inject (uint8_t)
-#define CMD_GET_GLITCH_VOLTAGE		'v' // Get the current voltage read from the i2c bus (uint8_t)
+#define CMD_GET_I2C_VCORE			'v' // Get the current VCORE read from the i2c bus (uint8_t)
 #define CMD_TRIGGER_USB				'T' // Force a trigger
 #define CMD_ARM						'A' // Arm the glitcher
 #define CMD_DISARM					'D' // Disarm the glitcher
@@ -86,7 +86,7 @@ typedef struct i2c_sniff_data_s {
 typedef struct glitch_s {
 	uint32_t ext_offset;
 	uint32_t width;
-	uint32_t reg_value;
+	uint8_t reg_value;
 } glitch_t;
 
 static void init_pins();

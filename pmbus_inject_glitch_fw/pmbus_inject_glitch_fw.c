@@ -62,8 +62,8 @@ int main()
 			putchar(RESP_OK);
 			break;
 
-		case CMD_GET_GLITCH_VOLTAGE:
-			putchar(glitch.reg_value);
+		case CMD_GET_I2C_VCORE:
+			putchar(i2c_sniff.value);
 			break;
 
 		case CMD_TRIGGER_USB:
@@ -80,35 +80,6 @@ int main()
 			break;
 		}
 	}
-
-		// uint8_t original_setting = i2c_sniff.value;
-		// int32_t glitch_delta_volt = 0, glitch_abs_volt = 0;
-		// puts("Give VCORE offset (e.g. +0.1, -0.1) or absolute value (e.g. 0.6): ");
-		// scanf("%s", command);
-		// if (command[0] == '+') {
-		// 	glitch_delta_volt = (int32_t)(atof(command + 1) * 100);
-		// } else if (command[0] == '-') {
-		// 	glitch_delta_volt = (int32_t)(atof(command + 1) * 100) * -1;
-		// } else {
-		// 	glitch_abs_volt = (int32_t)(atof(command) * 100);
-		// }
-
-		// if (original_setting && 0b10000000) {
-		// 	// We do not have any valid value yet
-		// 	printf("No valid value has been seen on the i2c bus. Is the glitcher connected?\n");
-	// 	// 	continue;
-	// 	// }
-
-
-	// 	gpio_put(PMBUS_MASTER_OE_PIN, 1);
-	// 	int write_res = i2c_write_timeout_us(pmbus_master_i2c, PMBUS_PMIC_ADDRESS, pmbus_cmd, sizeof(pmbus_cmd) / sizeof(pmbus_cmd[0]), false, 1000);
-	// 	gpio_put(PMBUS_MASTER_OE_PIN, 0);
-	// 	if (write_res == PICO_ERROR_GENERIC | write_res == PICO_ERROR_TIMEOUT) {
-	// 		printf("Error writing to I2C\n");
-	// 	} else {
-	// 		printf("Written to I2C\n");
-	// 	}
-	// }
 
 	return 0;
 }
@@ -168,11 +139,14 @@ void glitch_gpio_trig_disable() {
 
 void __not_in_flash_func(do_glitch)() {
 	/**
-	 * @brief Perform the glitch (can be registered as a GPIO irq callback)
+	 * @brief Perform the glitch (can be registered as a GPIO irq callback).
+	 * Temporarily disables interrupts when running the time-critical part
+	 *
+	 * This function runs on core1 when triggered by a GPIO irq, conversely
+	 * when a trigger is forced with the serial command `T`, it runs on core0.
 	*/
 
-	// TODO test I am actually running from core1 when called from the GPIO irq
-
+	// uint32_t ints = save_and_disable_interrupts();
 	if (i2c_sniff.value > TPS_VCORE_MAX) { // Makes things slower, but safer
 		putchar(RESP_GLITCH_FAIL);
 		puts("Sniffed value is unsafe. Ignoring");
@@ -182,13 +156,12 @@ void __not_in_flash_func(do_glitch)() {
 	uint8_t pmbus_cmd_restore[TPS_WRITE_REG_CMD_LEN] = {TPS_VCORE_REG, i2c_sniff.value};
 	busy_wait_us_32(glitch.ext_offset);
 	gpio_put(PMBUS_MASTER_OE_PIN, 1);
-	int write_restore_res = 0, write_glitch_res = 0; // TODO remove
-	// int write_glitch_res = i2c_write_timeout_us(pmbus_master_i2c, PMBUS_PMIC_ADDRESS, pmbus_cmd_glitch, TPS_WRITE_REG_CMD_LEN, true, 1000);
-	printf("Glitching with value 0x%x\n", glitch.reg_value);
+	int write_glitch_res = i2c_write_timeout_us(pmbus_master_i2c, PMBUS_PMIC_ADDRESS, pmbus_cmd_glitch, TPS_WRITE_REG_CMD_LEN, true, 1000);
 	busy_wait_us_32(glitch.width);
-	// int write_restore_res = i2c_write_timeout_us(pmbus_master_i2c, PMBUS_PMIC_ADDRESS, pmbus_cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 1000);
-	printf("Restoring with value 0x%x\n", i2c_sniff.value);
+	int write_restore_res = i2c_write_timeout_us(pmbus_master_i2c, PMBUS_PMIC_ADDRESS, pmbus_cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 1000);
 	gpio_put(PMBUS_MASTER_OE_PIN, 0);
+	// restore_interrupts(ints);
+
 	if (write_glitch_res == PICO_ERROR_GENERIC | write_glitch_res == PICO_ERROR_TIMEOUT) {
 		putchar(RESP_GLITCH_FAIL);
 		printf("Error writing glitch voltage to I2C\n");
