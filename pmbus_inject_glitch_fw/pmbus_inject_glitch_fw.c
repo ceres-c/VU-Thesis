@@ -7,8 +7,9 @@ volatile static glitch_t glitch = {.ext_offset = 0, .width = 0, .reg_value = 0};
 
 int main()
 {
-	// Disable eXecute In Place cache: we mostly care about consistenct, not speed right now
-	hw_clear_bits(&xip_ctrl_hw->ctrl, XIP_CTRL_EN_BITS); // TODO maybe we can actually execute from cache? idk
+	// TODO maybe we can actually execute from cache? Idk check if we have consistent timings
+	// // Disable eXecute In Place cache: we mostly care about consistenct, not speed right now
+	// hw_clear_bits(&xip_ctrl_hw->ctrl, XIP_CTRL_EN_BITS);
 
 	stdio_init_all();
 	stdio_set_translate_crlf(&stdio_usb, false);
@@ -63,7 +64,8 @@ int main()
 			break;
 
 		case CMD_GET_I2C_VCORE:
-			putchar(i2c_sniff.value);
+			uint8_t i2c_sniff_val = i2c_sniff.value;
+			putchar(i2c_sniff_val);
 			break;
 
 		case CMD_TRIGGER_USB:
@@ -120,8 +122,6 @@ static void __not_in_flash_func(i2c_slave_recv_irq)(i2c_inst_t *i2c, i2c_slave_e
 		}
 		i2c_sniff.value = byte_from_bus;
 		break;
-	case I2C_SLAVE_REQUEST: // master is requesting data (ignore, actual device will answer)
-		break;
 	case I2C_SLAVE_FINISH: // master has signalled Stop / Restart
 		i2c_sniff.reg_address_written = false;
 		break;
@@ -163,7 +163,7 @@ void __not_in_flash_func(do_glitch)() {
 	uint8_t pmbus_cmd_restore[TPS_WRITE_REG_CMD_LEN] = {TPS_VCORE_REG, restore_val};
 	busy_wait_us_32(glitch.ext_offset);
 	gpio_put(PMBUS_MASTER_OE_PIN, 1);
-	int write_glitch_res = i2c_write_timeout_us(pmbus_master_i2c, PMBUS_PMIC_ADDRESS, pmbus_cmd_glitch, TPS_WRITE_REG_CMD_LEN, true, 1000);
+	int write_glitch_res = i2c_write_timeout_us(pmbus_master_i2c, PMBUS_PMIC_ADDRESS, pmbus_cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 1000);
 	busy_wait_us_32(glitch.width);
 	int write_restore_res = i2c_write_timeout_us(pmbus_master_i2c, PMBUS_PMIC_ADDRESS, pmbus_cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 1000);
 	gpio_put(PMBUS_MASTER_OE_PIN, 0);

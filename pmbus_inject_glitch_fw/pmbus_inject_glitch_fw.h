@@ -59,8 +59,8 @@
 #define TPS_VCORE_ZERO				0b00000000 // 0V
 #define TPS_VCORE_MIN				0b00000001 // 0.5V
 #define TPS_VCORE_MIN_V				0.5f
-#define TPS_VCORE_MAX				0b01010001 // 1.3V - Arbitrary decided to not fry the CPU
-#define TPS_VCORE_MAX_V				1.3f
+#define TPS_VCORE_MAX				0b1001011 // 1.24V - Arbitrary decided to not fry the CPU (found on the bus when running stress)
+#define TPS_VCORE_MAX_V				1.24f
 
 #define CMD_PING					'P'
 #define CMD_EXT_OFFSET				'E' // How long to wait before triggering the glitch after a trigger (uint32_t)
