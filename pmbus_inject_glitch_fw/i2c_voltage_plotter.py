@@ -1,13 +1,5 @@
 #!/usr/bin/env python
 
-import argparse
-import itertools
-import random
-import struct
-import sys
-import threading
-import time
-
 import serial
 
 CMD = {
@@ -21,7 +13,7 @@ RESP = {
 }
 
 def main() -> int:
-	try: 
+	try:
 		s = serial.Serial(port='/dev/ttyACM0', baudrate=115200, timeout=0.1)
 	except Exception as e:
 		print(f'[!] Could not open serial port. Got:\n{e}\nAborting.')

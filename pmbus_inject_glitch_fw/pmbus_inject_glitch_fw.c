@@ -38,13 +38,13 @@ int main()
 			break;
 
 		case CMD_EXT_OFFSET:
-			uint32_t new_offset;
+			uint32_t new_offset = 0;
 			fread(&new_offset, sizeof(uint32_t), 1, stdin);
 			glitch.ext_offset = new_offset; // fread is not volatile-safe
 			putchar(RESP_OK);
 
 		case CMD_SET_GLITCH_WIDTH:
-			uint32_t new_width;
+			uint32_t new_width = 0;
 			fread(&new_width, sizeof(uint32_t), 1, stdin);
 			glitch.width = new_width; // fread is not volatile-safe
 			putchar(RESP_OK);
@@ -52,7 +52,7 @@ int main()
 
 		case CMD_SET_GLITCH_VOLTAGE:
 			// Set the target VCORE glitch voltage
-			uint8_t new_value;
+			uint8_t new_value = 0;
 			fread(&new_value, sizeof(uint8_t), 1, stdin);
 			if (new_value > TPS_VCORE_MAX) {
 				putchar(RESP_KO);
@@ -71,6 +71,9 @@ int main()
 		case CMD_TRIGGER_USB:
 			// Force a trigger
 			do_glitch();
+			// Disable GPIO irq on core1
+			multicore_reset_core1();
+			multicore_launch_core1(glitch_gpio_trig_disable);
 			break;
 
 		case CMD_PING:
