@@ -1,7 +1,7 @@
 /* According to Serial Flasher Protocol Specification - version 1 */
 #define S_ACK 0x06
 #define S_NAK 0x15
-#define S_CMD_NOP		0x00	/* No operation					*/
+#define S_CMD_NOP			0x00	/* No operation					*/
 #define S_CMD_Q_IFACE		0x01	/* Query interface version			*/
 #define S_CMD_Q_CMDMAP		0x02	/* Query supported commands bitmap		*/
 #define S_CMD_Q_PGMNAME		0x03	/* Query programmer name			*/
