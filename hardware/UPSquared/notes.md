@@ -24,6 +24,26 @@ control.
 `upassw0rd` allows access to the original BIOS engineering menu, as stated in
 the [docs](https://github.com/up-board/up-community/wiki/Firmware#engineering-bios-password).
 
+#### Original BIOS SPI/UART settings
+See [here](https://github.com/up-board/up-community/wiki/Pinout_UP2#fpga) for
+info on an interesting menu in the original bios where you can set which
+SPI/UART port is enabled and their settings.
+
+#### Linux UART settings
+```bash
+stty 115200 < /dev/ttyS0
+while true; do echo -ne A > /dev/ttyS0; done
+```
+
 ### GPIO
-GPIO goes through an Altera CPLD and requires a non-upstreamed driver. The
-source is available here: [pinctrl-upboard](https://github.com/up-division/pinctrl-upboard).
+GPIO goes through an Altera CPLD which acts as a level shifter[^1].
+This requires a non-upstreamed driver. The source is available here:
+[pinctrl-upboard](https://github.com/up-division/pinctrl-upboard).
+
+*_Important_*: UART1 on the GPIOs work in coreboot if booting with the latest
+IFWI image (not libmicro's). It might be that some sort of init is done there.
+
+_Note/Idea_: Since this is just a level shifter? Can't I just use the GPIO
+directly from the SoC soldering some wires to the CPLD?
+
+[^1]: [Up Squared pinout doc](https://github.com/up-board/up-community/wiki/Pinout_UP2#fpga)
