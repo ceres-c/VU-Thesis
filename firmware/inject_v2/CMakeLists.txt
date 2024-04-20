@@ -11,12 +11,14 @@ add_executable(picocoder)
 pico_generate_pio_header(picocoder ${CMAKE_CURRENT_LIST_DIR}/pio/spi.pio)
 
 target_sources(picocoder PRIVATE
+        spi.c
+        target_uart.c
         main.c
         # PIO components
         pio/pio_spi.c
         )
 
-target_link_libraries(picocoder PRIVATE pico_stdlib hardware_pio)
+target_link_libraries(picocoder PRIVATE pico_stdlib hardware_pio hardware_uart)
 pico_add_extra_outputs(picocoder)
 
 # enable usb output, disable uart output
