@@ -7,15 +7,24 @@
 #include "pico/stdlib.h"
 #include "pio/pio_spi.h"
 #include "hardware/clocks.h"
-#include "cmd.h"
-#include "spi.h"
-#include "target_uart.h"
 
-#define SPI_PIO		pio1
+// Registers for SIO
+#define GPIO_ATOMIC				((volatile uint32_t*)(SIO_BASE + SIO_GPIO_OUT_OFFSET))
+#define SET_GPIO_ATOMIC			((volatile uint32_t*)(SIO_BASE + SIO_GPIO_OUT_SET_OFFSET))
+#define CLR_GPIO_ATOMIC			((volatile uint32_t*)(SIO_BASE + SIO_GPIO_OUT_CLR_OFFSET))
+#define XOR_GPIO_ATOMIC			((volatile uint32_t*)(SIO_BASE + SIO_GPIO_OUT_XOR_OFFSET))
+
+#define SPI_PIO					pio1
+#define UART_TARGET				uart0
+#define UART_TARGET_BAUD		115200
+#define UART_TARGET_DATA_BITS	8
+#define UART_TARGET_STOP_BITS	1
+#define UART_TARGET_PARITY		UART_PARITY_NONE
 
 #define PIN_LED PICO_DEFAULT_LED_PIN
 #define PIN_UART_TX		0	// Pin 1
 #define PIN_UART_RX		1	// Pin 2
+#define PIN_UART_OE		2	// Pin 3 - Level shifter output Enable
 #define PIN_SPI_MISO	28	// Pin 34
 #define PIN_SPI_MOSI	27	// Pin 32
 #define PIN_SPI_SCK		26	// Pin 31

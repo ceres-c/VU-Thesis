@@ -1,4 +1,7 @@
 #include "picocoder.h"
+#include "cmd.h"
+#include "spi.h"
+#include "target_uart.h"
 
 uint32_t getu24() {
 	uint32_t c1 = getchar();
@@ -114,7 +117,7 @@ void process(pio_spi_inst_t *spi, int command) {
 			break;
 		case P_CMD_UART_ECHO:
 			target_uart_init();
-			target_uart_echo();
+			uart_enable();
 		default:
 			putchar(S_NAK);
 	}
