@@ -25,6 +25,7 @@ static uint32_t uart_getu32() {
 
 typedef enum {
 	TARGET_UNKNOWN,
+	TARGET_GLITCHED,
 	TARGET_READY,
 } target_state_t;
 static target_state_t target_state = TARGET_UNKNOWN;
@@ -59,12 +60,7 @@ static void on_uart_rx(void) {
 	case TARGET_UNKNOWN:
 		if (data == 'R') {				// Target is starting over
 			target_state = TARGET_READY;
-			uart_hw_write('C');			// Send connection ack
-		} else if (data == 'A') {		// Target is still alive
-			target_state = TARGET_UNKNOWN;
-			uint32_t response = uart_getu32();
-			putchar(P_CMD_RESULT_ALIVE);
-			putu32(response);
+			uart_hw_write('C');			// ACK connection
 		} else {						// Sometimes we get garbage when the board boots
 			target_state = TARGET_UNKNOWN;
 			uart_hw_write('X');			// Random byte to reset the target
@@ -72,6 +68,7 @@ static void on_uart_rx(void) {
 		break;
 	case TARGET_READY:
 		if (data == 'T') {				// Target is telling us to glitch
+			target_state = TARGET_GLITCHED;
 			// TODO do glitch here
 			// 1) wait for ext_offset
 			// 2) drop voltage
@@ -79,9 +76,24 @@ static void on_uart_rx(void) {
 			// 4) restore voltage
 			// 5) Wait for 'A' from target or timeout
 		} else {
+			target_state = TARGET_UNKNOWN;	// Go back to base state
 			uart_hw_write('Y');			// Random byte to reset the target
 		}
-		target_state = TARGET_UNKNOWN;	// Go back to base state
+		break;
+	case TARGET_GLITCHED:
+		if (data == 'R') {				// Target died
+			target_state = TARGET_READY;
+			putchar(P_CMD_RESULT_RESET);
+			uart_hw_write('C');			// Send connection ack
+		} else if (data == 'A') {		// Target is still alive!
+			target_state = TARGET_UNKNOWN;
+			uint32_t response = uart_getu32();
+			putchar(P_CMD_RESULT_ALIVE);
+			putu32(response);
+		} else {						// Huh?
+			target_state = TARGET_UNKNOWN;
+			uart_hw_write('X');			// Random byte to reset the target
+		}
 		break;
 	}
 
