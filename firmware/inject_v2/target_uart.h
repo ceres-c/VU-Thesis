@@ -5,7 +5,7 @@
 #include "cmd.h"
 
 void target_uart_init(void);
-void on_uart_rx(void);
+static void on_uart_rx(void);
 
 inline void uart_enable(void) {
 	*SET_GPIO_ATOMIC = 1 << PIN_UART_OE;

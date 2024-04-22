@@ -1,15 +1,18 @@
 #include "target_uart.h"
 
-#define UART_HW_UARTDR_DATA_MASK 0xFF
-
 inline static void uart_hw_write(uint8_t data) {
 	UART_TARGET_PTR->dr = data;
 }
 inline static uint8_t uart_hw_read(void) {
-	return UART_TARGET_PTR->dr & UART_HW_UARTDR_DATA_MASK; // TODO remove & if not needed
+	return UART_TARGET_PTR->dr;
 }
 inline static bool uart_hw_readable(void) {
-	return UART_TARGET_PTR->fr & UART_UARTFR_RXFE_BITS;
+	return !(UART_TARGET_PTR->fr & UART_UARTFR_RXFE_BITS);
+}
+inline static uint8_t uart_hw_read_blocking(void) {
+	while (!uart_hw_readable())
+		tight_loop_contents();
+	return uart_hw_read();
 }
 
 static uint32_t uart_getu32() {
@@ -24,7 +27,7 @@ typedef enum {
 	TARGET_UNKNOWN,
 	TARGET_READY,
 } target_state_t;
-static target_state_t target_state = TARGET_READY;
+static target_state_t target_state = TARGET_UNKNOWN;
 
 void target_uart_init(void) {
 	putchar('U');
@@ -42,14 +45,15 @@ void target_uart_init(void) {
 
 	// RX interrupt
 	int UART_IRQ = UART_TARGET == uart0 ? UART0_IRQ : UART1_IRQ;
+	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
+		uart_getc(UART_TARGET);
 	irq_set_exclusive_handler(UART_IRQ, on_uart_rx);
 	irq_set_enabled(UART_IRQ, true);
 	uart_set_irq_enables(UART_TARGET, true, false);
 }
 
-void on_uart_rx(void) {
-	uint8_t data = uart_hw_read();
-	printf("on_uart_rx: State: %d, data: %c\n", target_state, data); // TODO remove
+static void on_uart_rx(void) {
+	uint8_t data = uart_hw_read_blocking();
 
 	switch (target_state) {
 	case TARGET_UNKNOWN:
@@ -57,10 +61,11 @@ void on_uart_rx(void) {
 			target_state = TARGET_READY;
 			uart_hw_write('C');			// Send connection ack
 		} else if (data == 'A') {		// Target is still alive
+			target_state = TARGET_UNKNOWN;
 			uint32_t response = uart_getu32();
-			// putchar(P_CMD_RESULT_ALIVE); // TODO decomment
+			putchar(P_CMD_RESULT_ALIVE);
 			putu32(response);
-		} else {
+		} else {						// Sometimes we get garbage when the board boots
 			target_state = TARGET_UNKNOWN;
 			uart_hw_write('X');			// Random byte to reset the target
 		}
@@ -74,16 +79,11 @@ void on_uart_rx(void) {
 			// 4) restore voltage
 			// 5) Wait for 'A' from target or timeout
 		} else {
-			uart_hw_write('X');			// Random byte to reset the target
+			uart_hw_write('Y');			// Random byte to reset the target
 		}
 		target_state = TARGET_UNKNOWN;	// Go back to base state
 		break;
 	}
 
 	return;
-
-	// while (uart_is_readable_within_us(UART_TARGET, 0)) { // At 115200 baud, 1 bit is 8.68us
-	// 	// Drain the buffer
-	// 	uart_getc(UART_TARGET);
-	// }
 }
