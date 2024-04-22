@@ -113,7 +113,7 @@ void process(pio_spi_inst_t *spi, int command) {
 			getchar();
 			putchar(S_ACK);
 			break;
-		case P_CMD_UART_ECHO:
+		case P_CMD_ARM:
 			target_uart_init();
 			uart_enable();
 		default:
@@ -129,7 +129,7 @@ static pio_spi_inst_t spi = {
 
 int main() {
 	// Metadata for picotool
-	bi_decl(bi_program_description("Flashrom/serprog compatible firmware for the Raspberry Pi Pico"));
+	bi_decl(bi_program_description("PicoCoder: Rasperry Pi Pico microcode glitcher"));
 	bi_decl(bi_program_url("https://github.com/ceres-c/VU-Thesis/"));
 	bi_decl(bi_1pin_with_name(PIN_LED, "LED"));
 	bi_decl(bi_1pin_with_name(PIN_SPI_MISO, "MISO"));

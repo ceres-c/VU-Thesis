@@ -25,9 +25,20 @@
 #define S_CMD_S_PIN_STATE	0x15	/* Enable/disable output drivers				*/
 
 // picocode glitching commands
-#define P_CMD_UART_ECHO		0x31	/* Echo UART data								*/
+#define P_CMD_ARM			0x20	/* Enable glitch handler						*/
+#define P_CMD_SET_EXT_OFFST	0x21	/* Set external offset (wait after trigger)		*/
+#define P_CMD_SET_WIDTH		0x22	/* Set glitch width								*/
 
 // picocode glitch results
-#define P_CMD_RESULT_RESET	'r'		/* Target reset									*/
-#define P_CMD_RESULT_ALIVE	'a'		/* Target alive (data will follow)				*/
-#define P_CMD_RESULT_WEIRD	'w'		/* Target weird									*/
+#define P_CMD_RESULT_RESET	0x30	/* Target reset									*/
+#define P_CMD_RESULT_ALIVE	0x31	/* Target alive (data will follow)				*/
+#define P_CMD_RESULT_WEIRD	0x32	/* Target weird									*/
+
+// Commands to/from the target board
+#define T_CMD_RESET			'R'
+#define T_CMD_CONNECT		'C'
+#define T_CMD_TRIGGER		'T'
+#define T_CMD_ALIVE			'A'
+#define T_CMD_BOGUS1		0xF0	/* Unknown to the target, will reset target		*/
+#define T_CMD_BOGUS2		0xF1
+#define T_CMD_BOGUS3		0xF2
