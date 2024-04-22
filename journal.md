@@ -124,5 +124,16 @@ something with `BIOS_RESET_CPL`, idk...
 - Code cleanup
 - Add some pi pico sync stuff around the hijacked opcode
 
-## 2024-04-20
+## 2024-04-21
+- Pi pico firmware sync stuff
+
+## 2024-04-22
+- Got the sync to work properly (issues with UART not being ready to be read
+when the ISR was called)
+- Tested the setup without actual fault injection, seems ok.
+- It seems that the Intel CPU is running at a rather low ~16MHz. I measured the
+time between two consecutive `R` sent by the target with the logic analyzer,
+and they were 579,96273 ms apart. According to binja, 9 instructions are
+executed per cycle, and there are 1000000 cycles. That means:
+$$\left(\frac{579,96273 \ \text{ms}}{1000000 * 9}\right)^{−1} \approx 15,5 \ \text{Hz}$$
 
