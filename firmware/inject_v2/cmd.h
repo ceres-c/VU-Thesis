@@ -26,3 +26,8 @@
 
 // picocode glitching commands
 #define P_CMD_UART_ECHO		0x31	/* Echo UART data								*/
+
+// picocode glitch results
+#define P_CMD_RESULT_RESET	'r'		/* Target reset									*/
+#define P_CMD_RESULT_ALIVE	'a'		/* Target alive (data will follow)				*/
+#define P_CMD_RESULT_WEIRD	'w'		/* Target weird									*/

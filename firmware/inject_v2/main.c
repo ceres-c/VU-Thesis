@@ -19,12 +19,10 @@ uint32_t getu32() {
 }
 
 void putu32(uint32_t d) {
-	char buf[4];
-	memcpy(buf, &d, 4);
-	putchar(buf[0]);
-	putchar(buf[1]);
-	putchar(buf[2]);
-	putchar(buf[3]);
+	putchar(d & 0xFF);
+	putchar((d >> 8) & 0xFF);
+	putchar((d >> 16) & 0xFF);
+	putchar((d >> 24) & 0xFF);
 }
 
 unsigned char write_buffer[4096];

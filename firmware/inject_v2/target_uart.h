@@ -2,6 +2,7 @@
 #define TARGET_UART_H
 
 #include "picocoder.h"
+#include "cmd.h"
 
 void target_uart_init(void);
 void on_uart_rx(void);

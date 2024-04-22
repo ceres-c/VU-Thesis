@@ -8,6 +8,8 @@
 #include "pio/pio_spi.h"
 #include "hardware/clocks.h"
 
+#define GLITCH_LIVENESS_TIMEOUT	1000		// Max wait after glitch for target to send alive signal
+
 // Registers for SIO
 #define GPIO_ATOMIC				((volatile uint32_t*)(SIO_BASE + SIO_GPIO_OUT_OFFSET))
 #define SET_GPIO_ATOMIC			((volatile uint32_t*)(SIO_BASE + SIO_GPIO_OUT_SET_OFFSET))
@@ -16,6 +18,7 @@
 
 #define SPI_PIO					pio1
 #define UART_TARGET				uart0
+#define UART_TARGET_PTR			((uart_hw_t *)UART_TARGET)
 #define UART_TARGET_BAUD		115200
 #define UART_TARGET_DATA_BITS	8
 #define UART_TARGET_STOP_BITS	1
@@ -59,5 +62,9 @@ static inline float freq_to_clkdiv(uint32_t freq) {
 static inline uint32_t clkdiv_to_freq(float div) {
 	return clock_get_hz(clk_sys) / (div * pio_spi_cycles_per_bit);
 }
+
+uint32_t getu24();
+uint32_t getu32();
+void putu32(uint32_t d);
 
 #endif // _PICOCODER_H
