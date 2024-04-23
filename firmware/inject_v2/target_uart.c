@@ -23,21 +23,14 @@ static uint32_t uart_getu32() {
 	return c1 | (c2<<8) | (c3<<16) | (c4<<24);
 }
 
-typedef enum {
-	TARGET_UNKNOWN,
-	TARGET_GLITCHED,
-	TARGET_READY,
-} target_state_t;
-static target_state_t target_state = TARGET_UNKNOWN;
+static void irq_uart_glitch(void);
 
 void target_uart_init(void) {
-	putchar('U');
 	uart_init(UART_TARGET, UART_TARGET_BAUD);
 
 	gpio_set_function(PIN_UART_TX, GPIO_FUNC_UART);
 	gpio_set_function(PIN_UART_RX, GPIO_FUNC_UART);
 	gpio_set_function(PIN_UART_OE, GPIO_FUNC_SIO);
-	gpio_set_pulls(PIN_UART_RX, false, true);
 	gpio_set_dir(PIN_UART_OE, GPIO_OUT);
 
 	uart_set_hw_flow(UART_TARGET, false, false);
@@ -48,12 +41,19 @@ void target_uart_init(void) {
 	int UART_IRQ = UART_TARGET == uart0 ? UART0_IRQ : UART1_IRQ;
 	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
 		uart_getc(UART_TARGET);
-	irq_set_exclusive_handler(UART_IRQ, on_uart_rx);
+	irq_set_exclusive_handler(UART_IRQ, irq_uart_glitch);
 	irq_set_enabled(UART_IRQ, true);
-	uart_set_irq_enables(UART_TARGET, true, false);
 }
 
-static void on_uart_rx(void) {
+
+typedef enum {
+	TARGET_UNKNOWN,
+	TARGET_GLITCHED,
+	TARGET_READY,
+} target_state_t;
+static target_state_t target_state = TARGET_UNKNOWN;
+
+static void irq_uart_glitch(void) {
 	uint8_t data = uart_hw_read_blocking();
 
 	switch (target_state) {

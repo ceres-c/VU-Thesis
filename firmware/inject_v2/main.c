@@ -114,8 +114,13 @@ void process(pio_spi_inst_t *spi, int command) {
 			putchar(S_ACK);
 			break;
 		case P_CMD_ARM:
-			target_uart_init();
-			uart_enable();
+			uart_shifter_enable();
+			uart_enable_irq();
+			break;
+		case P_CMD_DISARM:
+			uart_shifter_disable();
+			uart_disable_irq();
+			break;
 		default:
 			putchar(S_NAK);
 	}
@@ -144,6 +149,7 @@ int main() {
 	stdio_set_translate_crlf(&stdio_usb, false);
 
 	serprog_spi_init(&spi, 1000000); // 1 MHz
+	target_uart_init();
 
 	gpio_init(PIN_LED);
 	gpio_set_dir(PIN_LED, GPIO_OUT);

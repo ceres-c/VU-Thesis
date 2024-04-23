@@ -26,8 +26,9 @@
 
 // picocode glitching commands
 #define P_CMD_ARM			0x20	/* Enable glitch handler						*/
-#define P_CMD_SET_EXT_OFFST	0x21	/* Set external offset (wait after trigger)		*/
-#define P_CMD_SET_WIDTH		0x22	/* Set glitch width								*/
+#define P_CMD_DISARM		0x21	/* Disable glitch handler						*/
+#define P_CMD_SET_EXT_OFFST	0x22	/* Set external offset (wait after trigger)		*/
+#define P_CMD_SET_WIDTH		0x23	/* Set glitch width								*/
 
 // picocode glitch results
 #define P_CMD_RESULT_RESET	0x30	/* Target reset									*/
