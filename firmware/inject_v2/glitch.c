@@ -63,8 +63,8 @@ void target_uart_init(void) {
 }
 
 void uart_echo(void) {
-	printf("target_state: %d\n", target_state);
-
+	puts("UART echo, power cycle to exit");
+	uart_level_shifter_enable();
 	while (true) {
 		char c = getchar_timeout_us(0);
 		if (c != PICO_ERROR_TIMEOUT) {
@@ -92,19 +92,11 @@ static void irq_uart_glitch(void) {
 	case TARGET_READY:
 		if (data == T_CMD_TRIGGER) {		// Target is telling us to glitch
 			target_state = TARGET_GLITCHED;
-
-			// // busy_wait_us_32(glitch.ext_offset); // TODO decomment
-			// int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, pmbus_cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
-			// // busy_wait_us_32(glitch.width); // TODO decomment
-			// // busy_wait_us_32(1000);
-			// int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, pmbus_cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
-
-			// TODO do glitch here
-			// 1) wait for ext_offset
-			// 2) drop voltage
-			// 3) wait for width
-			// 4) restore voltage
-			// 5) Wait for 'A' from target or timeout
+			// busy_wait_us_32(glitch.ext_offset); // TODO decomment
+			int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, pmbus_cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
+			// busy_wait_us_32(glitch.width); // TODO decomment
+			// busy_wait_us_32(1000);
+			int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, pmbus_cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
 		} else {
 			target_state = TARGET_UNKNOWN;	// Go back to base state
 			uart_hw_write(T_CMD_BOGUS2);	// Random byte to reset the target
@@ -113,12 +105,10 @@ static void irq_uart_glitch(void) {
 	case TARGET_GLITCHED:
 		target_state = TARGET_IGNORE;
 		if (data == T_CMD_RESET) {			// Target died
-			// target_state = TARGET_READY; // TODO remove
 			putchar(P_CMD_RESULT_RESET);
 			uart_hw_write(T_CMD_CONNECT);	// Send connection ack
 		} else if (data == T_CMD_ALIVE) {	// Target is still alive!
-			// target_state = TARGET_UNKNOWN; // TODO remove
-			uint32_t response = uart_getu32_timeout_cycles(5000); // TODO remove this magic
+			uint32_t response = uart_getu32_timeout_cycles(READ_TIMEOUT_CYCLES); // At 115200 baud, each byte 8N1 takes 78us. Well within this timeout
 			// uint32_t response = uart_getu32();
 			if (response == STDIO_NO_INPUT) {
 				putchar(P_CMD_RESULT_DATA_TIMEOUT);
@@ -127,7 +117,6 @@ static void irq_uart_glitch(void) {
 				putu32(response);
 			}
 		} else {							// Huh?
-			// target_state = TARGET_UNKNOWN; // TODO remove
 			putchar(P_CMD_RESULT_WEIRD);
 			uart_hw_write(T_CMD_BOGUS3);	// Random byte to reset the target
 		}

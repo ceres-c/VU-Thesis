@@ -38,6 +38,7 @@
 
 // Misc
 #define P_CMD_UART_ECHO				0x65	/* Echo UART data from target to USB			*/
+#define P_CMD_I2C_WRITE				0x66	/* Write some random stuff to I2C/PMBus			*/
 
 // Commands to/from the target board
 #define T_CMD_RESET					'R'

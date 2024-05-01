@@ -6,6 +6,7 @@
 #include "pmbus.h"
 
 #define STDIO_NO_INPUT -2
+#define READ_TIMEOUT_CYCLES 5000 // At the standard 125MHz, this is 8ns*5000 = 40us (plus loop overhead)
 
 typedef enum {
 	TARGET_IGNORE,		// Disarmed

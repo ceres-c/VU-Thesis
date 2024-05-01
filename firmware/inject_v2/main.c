@@ -126,8 +126,15 @@ void process(pio_spi_inst_t *spi, int command) {
 			glitcher_disarm();
 			break;
 		case P_CMD_UART_ECHO:
-			puts("UART echo, power cycle to exit");
 			uart_echo();
+			break;
+		case P_CMD_I2C_WRITE:
+			uart_level_shifter_enable();
+			putchar('X');
+			uart_putc(UART_TARGET, 'X');
+			uint8_t pmbus_cmd_glitch[TPS_WRITE_REG_CMD_LEN] = {TPS_REG_BUCK2CTRL, TPS_VCORE_MIN};
+			int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, pmbus_cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
+			uart_level_shifter_disable();
 			break;
 		default:
 			putchar(S_NAK);
@@ -161,9 +168,11 @@ int main() {
 
 	// Initialize all peripherals
 	target_uart_init();					// UART:	RPi <-> coreboot (115200 baud)
+	// gpio_disable_pulls(PIN_PMBUS_SDA);	// Don't add extra pulls, let the CPU handle it
+	// gpio_disable_pulls(PIN_PMBUS_SCL);
+	gpio_set_pulls(PIN_PMBUS_SDA, true, false);
+	gpio_set_pulls(PIN_PMBUS_SCL, true, false);
 	i2c_init(I2C_PMBUS, 1000000);		// PMBus:	CPU <-> PMIC (1 MHz)
-	gpio_disable_pulls(PIN_PMBUS_SDA);	// Don't add extra pulls, let the CPU handle it
-	gpio_disable_pulls(PIN_PMBUS_SCL);
 	serprog_spi_init(&spi, 1000000);	// Serprog:	RPi <-> BIOS flash (1 MHz)
 	gpio_init(PIN_LED);					// Command processing LED
 	gpio_set_dir(PIN_LED, GPIO_OUT);
