@@ -1,7 +1,13 @@
+/*
+ * PicoCoder: Raspberry Pi Pico microcode glitcher
+ * Serprog code and command handling are taken from Thomas Roth's pico-serprog
+ */
+
 #include "picocoder.h"
 #include "cmd.h"
 #include "spi.h"
-#include "target_uart.h"
+#include "glitch.h"
+#include "pmbus.h"
 
 uint32_t getu24() {
 	uint32_t c1 = getchar();
@@ -114,12 +120,14 @@ void process(pio_spi_inst_t *spi, int command) {
 			putchar(S_ACK);
 			break;
 		case P_CMD_ARM:
-			uart_shifter_enable();
-			uart_enable_irq();
+			glitcher_arm();
 			break;
 		case P_CMD_DISARM:
-			uart_shifter_disable();
-			uart_disable_irq();
+			glitcher_disarm();
+			break;
+		case P_CMD_UART_ECHO:
+			puts("UART echo, power cycle to exit");
+			uart_echo();
 			break;
 		default:
 			putchar(S_NAK);
@@ -136,22 +144,28 @@ int main() {
 	// Metadata for picotool
 	bi_decl(bi_program_description("PicoCoder: Rasperry Pi Pico microcode glitcher"));
 	bi_decl(bi_program_url("https://github.com/ceres-c/VU-Thesis/"));
+	bi_decl(bi_1pin_with_name(PIN_UART_TX, "TX"));
+	bi_decl(bi_1pin_with_name(PIN_UART_RX, "RX"));
+	bi_decl(bi_1pin_with_name(PIN_UART_OE, "OE"));
+	bi_decl(bi_1pin_with_name(PIN_PMBUS_SDA, "SDA"));
+	bi_decl(bi_1pin_with_name(PIN_PMBUS_SCL, "SCL"));
 	bi_decl(bi_1pin_with_name(PIN_LED, "LED"));
 	bi_decl(bi_1pin_with_name(PIN_SPI_MISO, "MISO"));
 	bi_decl(bi_1pin_with_name(PIN_SPI_MOSI, "MOSI"));
 	bi_decl(bi_1pin_with_name(PIN_SPI_SCK, "SCK"));
 	bi_decl(bi_1pin_with_name(PIN_SPI_CS, "CS#"));
-	bi_decl(bi_1pin_with_name(PIN_UART_TX, "TX"));
-	bi_decl(bi_1pin_with_name(PIN_UART_RX, "RX"));
 
 	stdio_init_all();
 
 	stdio_set_translate_crlf(&stdio_usb, false);
 
-	serprog_spi_init(&spi, 1000000); // 1 MHz
-	target_uart_init();
-
-	gpio_init(PIN_LED);
+	// Initialize all peripherals
+	target_uart_init();					// UART:	RPi <-> coreboot (115200 baud)
+	i2c_init(I2C_PMBUS, 1000000);		// PMBus:	CPU <-> PMIC (1 MHz)
+	gpio_disable_pulls(PIN_PMBUS_SDA);	// Don't add extra pulls, let the CPU handle it
+	gpio_disable_pulls(PIN_PMBUS_SCL);
+	serprog_spi_init(&spi, 1000000);	// Serprog:	RPi <-> BIOS flash (1 MHz)
+	gpio_init(PIN_LED);					// Command processing LED
 	gpio_set_dir(PIN_LED, GPIO_OUT);
 
 	// Command handling
