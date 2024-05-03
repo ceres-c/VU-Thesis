@@ -21,6 +21,7 @@
 #define UART_TARGET				uart0
 #define UART_TARGET_IRQ			UART0_IRQ
 #define I2C_PMBUS				i2c0
+#define PMBUS_BAUD				1000000 // 1 MHz
 #define UART_TARGET_PTR			((uart_hw_t *)UART_TARGET)
 #define UART_TARGET_BAUD		115200
 #define UART_TARGET_DATA_BITS	8
@@ -31,8 +32,8 @@
 #define PIN_UART_TX		0	// Pin 1
 #define PIN_UART_RX		1	// Pin 2
 #define PIN_UART_OE		2	// Pin 3 - Level shifter output Enable
-#define PIN_PMBUS_SDA	4	// Pin 6
-#define PIN_PMBUS_SCL	5	// Pin 7
+#define PIN_PMBUS_SDA	8	// Pin 6 (Can't use 4 and 5 because of funny soldering on my board)
+#define PIN_PMBUS_SCL	9	// Pin 7
 #define PIN_SPI_MISO	28	// Pin 34
 #define PIN_SPI_MOSI	27	// Pin 32
 #define PIN_SPI_SCK		26	// Pin 31

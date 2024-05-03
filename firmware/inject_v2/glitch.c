@@ -9,18 +9,18 @@ uint8_t ret_i = 0;
 inline static void uart_hw_write(uint8_t data) {
 	UART_TARGET_PTR->dr = data;
 }
-inline static uint8_t uart_hw_read(void) {
+inline static volatile uint8_t uart_hw_read(void) {
 	return UART_TARGET_PTR->dr;
 }
-inline static bool uart_hw_readable(void) {
+inline static volatile bool uart_hw_readable(void) {
 	return !(UART_TARGET_PTR->fr & UART_UARTFR_RXFE_BITS);
 }
-inline static uint8_t uart_hw_read_blocking(void) {
+inline static volatile uint8_t uart_hw_read_blocking(void) {
 	while (!uart_hw_readable())
 		tight_loop_contents();
 	return uart_hw_read();
 }
-inline static uint8_t uart_hw_read_timeout_cycles(uint32_t timeout_cycles) {
+inline static volatile uint8_t uart_hw_read_timeout_cycles(uint32_t timeout_cycles) {
 	for (uint32_t i = 0; i < timeout_cycles; i++) {
 		if (uart_hw_readable())
 			return uart_hw_read();
@@ -45,11 +45,6 @@ static void irq_uart_glitch(void);
 void target_uart_init(void) {
 	uart_init(UART_TARGET, UART_TARGET_BAUD);
 
-	gpio_set_function(PIN_UART_TX, GPIO_FUNC_UART);
-	gpio_set_function(PIN_UART_RX, GPIO_FUNC_UART);
-	gpio_set_function(PIN_UART_OE, GPIO_FUNC_SIO);
-	gpio_set_dir(PIN_UART_OE, GPIO_OUT);
-
 	uart_set_hw_flow(UART_TARGET, false, false);
 	uart_set_format(UART_TARGET, UART_TARGET_DATA_BITS, UART_TARGET_STOP_BITS, UART_TARGET_PARITY);
 	uart_set_fifo_enabled(UART_TARGET, false); // Char by char
@@ -66,12 +61,12 @@ void uart_echo(void) {
 	puts("UART echo, power cycle to exit");
 	uart_level_shifter_enable();
 	while (true) {
-		char c = getchar_timeout_us(0);
+		int c = getchar_timeout_us(0);
 		if (c != PICO_ERROR_TIMEOUT) {
 			uart_hw_write(c);
 		}
 		if (uart_hw_readable()) {
-			putchar(uart_hw_read_blocking());
+			putchar(uart_hw_read());
 		}
 	}
 }
@@ -92,11 +87,15 @@ static void irq_uart_glitch(void) {
 	case TARGET_READY:
 		if (data == T_CMD_TRIGGER) {		// Target is telling us to glitch
 			target_state = TARGET_GLITCHED;
+			bool irq_state = irq_is_enabled(UART_TARGET_IRQ);
+			irq_set_enabled(UART_TARGET_IRQ, false);
+
 			// busy_wait_us_32(glitch.ext_offset); // TODO decomment
 			int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, pmbus_cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
 			// busy_wait_us_32(glitch.width); // TODO decomment
 			// busy_wait_us_32(1000);
 			int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, pmbus_cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
+			irq_set_enabled(UART_TARGET_IRQ, irq_state);
 		} else {
 			target_state = TARGET_UNKNOWN;	// Go back to base state
 			uart_hw_write(T_CMD_BOGUS2);	// Random byte to reset the target

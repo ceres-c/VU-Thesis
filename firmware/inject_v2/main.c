@@ -126,15 +126,19 @@ void process(pio_spi_inst_t *spi, int command) {
 			glitcher_disarm();
 			break;
 		case P_CMD_UART_ECHO:
+			glitcher_disarm();
 			uart_echo();
 			break;
-		case P_CMD_I2C_WRITE:
-			uart_level_shifter_enable();
-			putchar('X');
-			uart_putc(UART_TARGET, 'X');
+		case P_CMD_PMBUS_WRITE:
 			uint8_t pmbus_cmd_glitch[TPS_WRITE_REG_CMD_LEN] = {TPS_REG_BUCK2CTRL, TPS_VCORE_MIN};
+			uint8_t pmbus_cmd_restore[TPS_WRITE_REG_CMD_LEN] = {TPS_REG_BUCK2CTRL, TPS_VCORE_SAFE};
 			int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, pmbus_cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
-			uart_level_shifter_disable();
+			int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, pmbus_cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
+			if (write_glitch_res != TPS_WRITE_REG_CMD_LEN)
+				printf("write_glitch_res: %d\n", write_glitch_res);
+			if (write_restore_res != TPS_WRITE_REG_CMD_LEN)
+				printf("write_restore_res: %d\n", write_restore_res);
+			putchar('K');
 			break;
 		default:
 			putchar(S_NAK);
@@ -147,35 +151,44 @@ static pio_spi_inst_t spi = {
 	.cs_pin = PIN_SPI_CS
 };
 
+static void init_pins() {
+	gpio_disable_pulls(PIN_PMBUS_SDA);	// Don't add extra pulls, let the CPU handle it
+	gpio_disable_pulls(PIN_PMBUS_SCL);
+	gpio_pull_down(PIN_UART_OE);
+
+	gpio_set_function(PIN_UART_TX, GPIO_FUNC_UART);
+	gpio_set_function(PIN_UART_RX, GPIO_FUNC_UART);
+	gpio_set_function(PIN_PMBUS_SDA, GPIO_FUNC_I2C);
+	gpio_set_function(PIN_PMBUS_SCL, GPIO_FUNC_I2C);
+	gpio_set_function(PIN_UART_OE, GPIO_FUNC_SIO);
+	gpio_set_function(PIN_LED, GPIO_FUNC_SIO);
+
+	gpio_put(PIN_UART_OE, 0);
+	gpio_put(PIN_LED, 0);
+
+	gpio_set_dir(PIN_UART_OE, GPIO_OUT);
+	gpio_set_dir(PIN_LED, GPIO_OUT);
+}
+
 int main() {
 	// Metadata for picotool
 	bi_decl(bi_program_description("PicoCoder: Rasperry Pi Pico microcode glitcher"));
 	bi_decl(bi_program_url("https://github.com/ceres-c/VU-Thesis/"));
-	bi_decl(bi_1pin_with_name(PIN_UART_TX, "TX"));
-	bi_decl(bi_1pin_with_name(PIN_UART_RX, "RX"));
-	bi_decl(bi_1pin_with_name(PIN_UART_OE, "OE"));
-	bi_decl(bi_1pin_with_name(PIN_PMBUS_SDA, "SDA"));
-	bi_decl(bi_1pin_with_name(PIN_PMBUS_SCL, "SCL"));
+	bi_decl(bi_3pins_with_names(PIN_UART_TX, "TX", PIN_UART_RX, "RX", PIN_UART_OE, "OE"));
+	bi_decl(bi_2pins_with_names(PIN_PMBUS_SDA, "SDA", PIN_PMBUS_SCL, "SCL"));
 	bi_decl(bi_1pin_with_name(PIN_LED, "LED"));
-	bi_decl(bi_1pin_with_name(PIN_SPI_MISO, "MISO"));
-	bi_decl(bi_1pin_with_name(PIN_SPI_MOSI, "MOSI"));
-	bi_decl(bi_1pin_with_name(PIN_SPI_SCK, "SCK"));
-	bi_decl(bi_1pin_with_name(PIN_SPI_CS, "CS#"));
+	bi_decl(bi_4pins_with_names(PIN_SPI_MISO, "MISO", PIN_SPI_MOSI, "MOSI", PIN_SPI_SCK, "SCK", PIN_SPI_CS, "CS#"));
 
 	stdio_init_all();
-
 	stdio_set_translate_crlf(&stdio_usb, false);
-
-	// Initialize all peripherals
-	target_uart_init();					// UART:	RPi <-> coreboot (115200 baud)
-	// gpio_disable_pulls(PIN_PMBUS_SDA);	// Don't add extra pulls, let the CPU handle it
-	// gpio_disable_pulls(PIN_PMBUS_SCL);
-	gpio_set_pulls(PIN_PMBUS_SDA, true, false);
-	gpio_set_pulls(PIN_PMBUS_SCL, true, false);
-	i2c_init(I2C_PMBUS, 1000000);		// PMBus:	CPU <-> PMIC (1 MHz)
+	init_pins();
+	target_uart_init();									// UART:	RPi <-> coreboot (115200 baud)
+	uint actual_baud = i2c_init(I2C_PMBUS, PMBUS_BAUD);	// PMBus:	CPU <-> PMIC (1 MHz)
+	if (actual_baud < (PMBUS_BAUD - 1000) || actual_baud > (PMBUS_BAUD + 1000)) {
+		while (1)
+			printf("I2C baudrate mismatch: %d. Halting\n", actual_baud);
+	}
 	serprog_spi_init(&spi, 1000000);	// Serprog:	RPi <-> BIOS flash (1 MHz)
-	gpio_init(PIN_LED);					// Command processing LED
-	gpio_set_dir(PIN_LED, GPIO_OUT);
 
 	// Command handling
 	while(1) {
