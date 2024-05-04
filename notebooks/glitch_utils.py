@@ -4,6 +4,7 @@ from typing import Annotated, Optional
 import random
 import struct
 
+from matplotlib.pyplot import Line2D
 import serial
 
 P_CMD_ARM					= b'\x20'
@@ -25,6 +26,9 @@ P_CMD_RESULT_DATA_TIMEOUT	= b'\x53'	# Target timeout (e.g. target already sent p
 
 P_CMD_RETURN_OK				= b'\x61'	# Command successful
 P_CMD_RETURN_KO				= b'\x62'	# Command failed
+P_CMD_PONG					= b'\x63'	# Response to ping
+
+P_CMD_PING					= b'\x70'	# Ping picocoder
 
 class GlitchResult(Enum):
 	TIMEOUT		= 0
@@ -52,6 +56,8 @@ class GlitchController:
 	def __init__(self, groups: list[str], parameters: list[str]):
 		self.groups = groups
 		self.params = {param: {'start': 0, 'end': 0, 'step': 1} for param in parameters}
+		self.results_types: set[GlitchResult] = set() # For legend plotting
+		self.results: list[tuple[tuple[int, ...], GlitchResult]] = []
 
 	def set_range(self, param: str, start: int, end: int) -> None:
 		if param not in self.params:
@@ -70,12 +76,29 @@ class GlitchController:
 			random.shuffle(r)
 		yield from product(*ranges) # type: ignore
 
+	def add_result(self, glitch_values: tuple[int, ...], result: GlitchResult):
+		self.results_types.add(result)
+		self.results.append((glitch_values, result))
+
+	def get_legend_elements(self) -> list[str]:
+		'''
+		Get a legend with matching markers and colors that can be plotted with
+		`ax.legend(handles=gc.get_legend_elements())`
+		'''
+		#plt.Line2D([0], [0], marker='o', color='w', label=result_to_legend(result), markerfacecolor='blue', markersize=10
+		ret = []
+		for r_t in self.results_types:
+			[marker, color] = [*result_to_plt(r_t)]
+			ret.append(Line2D([0], [0], marker=marker, color='w', label=r_t.name, markerfacecolor=color, markersize=10))
+		return ret
+
 class GlitchyMcGlitchFace:
 	s: serial.Serial = None # type: ignore
 
 	# Locally cached properties
 	_ext_offset: int = None # type: ignore
 	_width: int = None		# type: ignore
+	_connected: bool = False
 
 	@property
 	def ext_offset(self) -> int:
@@ -93,6 +116,8 @@ class GlitchyMcGlitchFace:
 			return
 		self._ext_offset = value
 		self.s.write(struct.pack('<BI', struct.unpack('B', P_CMD_SET_EXT_OFFST)[0], value))
+		if self.s.read(1) != P_CMD_RETURN_OK:
+			raise ValueError('Could not set external offset')
 
 	@property
 	def width(self) -> int:
@@ -109,14 +134,31 @@ class GlitchyMcGlitchFace:
 			return
 		self._width = value
 		self.s.write(struct.pack('<BI', struct.unpack('B', P_CMD_SET_WIDTH)[0], value))
+		if self.s.read(1) != P_CMD_RETURN_OK:
+			raise ValueError('Could not set width')
 
 	def __init__(self, port: str = '/dev/ttyACM0', baudrate: int = 115200, timeout: float = 1.0):
 		self.s = serial.Serial(port, baudrate, timeout=timeout)
 
-	def glitch_mul(self, glitch_setting: Annotated[tuple[int], 2], expected: int) -> tuple[GlitchResult, Optional[int]]:
+	def ping(self) -> bool:
+		'''
+		Ping picocoder
+		'''
+		self.s.write(P_CMD_PING)
+		if self.s.read(1) == P_CMD_PONG:
+			return True
+		return False
+
+	def glitch_mul(self, glitch_setting: Annotated[tuple[int], 2], expected: int) -> tuple[GlitchResult, int|bytes|None]:
 		'''
 		Perform a glitch on `mul` with the given settings
 		'''
+
+		if not self._connected:
+			ping = self.ping()
+			if not ping:
+				raise ConnectionError('Could not connect to picocoder')
+			self._connected = ping
 
 		[self.ext_offset, self.width] = [*glitch_setting]
 
@@ -140,4 +182,4 @@ class GlitchyMcGlitchFace:
 			return GlitchResult.WEIRD, None
 		if data == P_CMD_RESULT_DATA_TIMEOUT:
 			return GlitchResult.TIMEOUT, None
-		return GlitchResult.WEIRD, None
+		return GlitchResult.WEIRD, data

@@ -27,8 +27,10 @@
 // picocode glitching commands
 #define P_CMD_ARM					0x20	/* Enable glitch handler						*/
 #define P_CMD_DISARM				0x21	/* Disable glitch handler						*/
-#define P_CMD_SET_EXT_OFFST			0x22	/* Set external offset (wait after trigger)		*/
-#define P_CMD_SET_WIDTH				0x23	/* Set glitch width								*/
+#define P_CMD_FORCE					0x22	/* Force write to PMBus to perform a glitch		*/
+#define P_CMD_SET_VOLTAGE			0x23	/* Set glitch voltage							*/
+#define P_CMD_SET_EXT_OFFST			0x24	/* Set external offset (wait after trig.) in us	*/
+#define P_CMD_SET_WIDTH				0x25	/* Set glitch width	(duration of glitch) in us	*/
 
 // picocode glitch results
 #define P_CMD_RESULT_RESET			0x50	/* Target reset									*/
@@ -36,9 +38,14 @@
 #define P_CMD_RESULT_WEIRD			0x52	/* Target weird									*/
 #define P_CMD_RESULT_DATA_TIMEOUT	0x53	/* Target timeout (e.g. target already sent post-glitch data) */
 
+// picocode command responses
+#define P_CMD_RETURN_OK				0x61	/* Command successful							*/
+#define P_CMD_RETURN_KO				0x62	/* Command failed								*/
+#define P_CMD_PONG					0x63	/* Response to ping								*/
+
 // Misc
-#define P_CMD_UART_ECHO				0x65	/* Echo UART data from target to USB			*/
-#define P_CMD_PMBUS_WRITE			0x66	/* Bring the voltage to hardcoded min (0.5V) and back to safe */
+#define P_CMD_PING					0x70	/* Ping from host to picocoder					*/
+#define P_CMD_UART_ECHO				0x75	/* Echo UART data from target to USB			*/
 
 // Commands to/from the target board
 #define T_CMD_RESET					'R'

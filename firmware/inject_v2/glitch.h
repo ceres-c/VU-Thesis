@@ -16,6 +16,14 @@ typedef enum {
 } target_state_t;
 extern target_state_t target_state;
 
+typedef struct glitch_s {
+	uint32_t ext_offset;
+	uint32_t width;
+	uint8_t cmd_glitch[TPS_WRITE_REG_CMD_LEN];
+	uint8_t cmd_restore[TPS_WRITE_REG_CMD_LEN];
+} glitch_t;
+extern glitch_t glitch;
+
 void target_uart_init(void);
 void uart_echo(void);
 

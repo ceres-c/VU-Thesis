@@ -33,6 +33,7 @@ void putu32(uint32_t d) {
 
 unsigned char write_buffer[4096];
 
+
 void process(pio_spi_inst_t *spi, int command) {
 	switch(command) {
 		case S_CMD_NOP:
@@ -125,20 +126,44 @@ void process(pio_spi_inst_t *spi, int command) {
 		case P_CMD_DISARM:
 			glitcher_disarm();
 			break;
-		case P_CMD_UART_ECHO:
-			glitcher_disarm();
-			uart_echo();
-			break;
-		case P_CMD_PMBUS_WRITE:
-			uint8_t pmbus_cmd_glitch[TPS_WRITE_REG_CMD_LEN] = {TPS_REG_BUCK2CTRL, TPS_VCORE_MIN};
-			uint8_t pmbus_cmd_restore[TPS_WRITE_REG_CMD_LEN] = {TPS_REG_BUCK2CTRL, TPS_VCORE_SAFE};
-			int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, pmbus_cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
-			int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, pmbus_cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
+		case P_CMD_FORCE:
+			busy_wait_us_32(glitch.ext_offset);
+			int write_glitch_res = i2c_write_timeout_us(
+				I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
+			busy_wait_us_32(glitch.width);
+			int write_restore_res = i2c_write_timeout_us(
+				I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
 			if (write_glitch_res != TPS_WRITE_REG_CMD_LEN)
 				printf("write_glitch_res: %d\n", write_glitch_res);
 			if (write_restore_res != TPS_WRITE_REG_CMD_LEN)
 				printf("write_restore_res: %d\n", write_restore_res);
-			putchar('K');
+			putchar(P_CMD_RETURN_OK);
+			break;
+		case P_CMD_SET_VOLTAGE:
+			uint8_t new_value = 0;
+			fread(&new_value, sizeof(uint8_t), 1, stdin);
+			if (new_value > TPS_VCORE_MAX) {
+				putchar(P_CMD_RETURN_KO);
+				puts("[!] Value risks frying the CPU. Ignoring");
+				break;
+			}
+			glitch.cmd_glitch[1] = new_value;
+			putchar(P_CMD_RETURN_OK);
+			break;
+		case P_CMD_SET_EXT_OFFST:
+			glitch.ext_offset = getu32();
+			putchar(P_CMD_RETURN_OK);
+			break;
+		case P_CMD_SET_WIDTH:
+			glitch.width = getu32();
+			putchar(P_CMD_RETURN_OK);
+			break;
+		case P_CMD_UART_ECHO:
+			glitcher_disarm();
+			uart_echo();
+			break;
+		case P_CMD_PING:
+			putchar(P_CMD_PONG);
 			break;
 		default:
 			putchar(S_NAK);

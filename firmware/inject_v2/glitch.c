@@ -1,8 +1,7 @@
 #include "glitch.h"
 
 target_state_t target_state = TARGET_IGNORE;
-uint8_t pmbus_cmd_glitch[TPS_WRITE_REG_CMD_LEN] = {TPS_REG_BUCK2CTRL, TPS_VCORE_MIN};
-uint8_t pmbus_cmd_restore[TPS_WRITE_REG_CMD_LEN] = {TPS_REG_BUCK2CTRL, TPS_VCORE_SAFE};
+glitch_t glitch = {0, 0, {TPS_REG_BUCK2CTRL, TPS_VCORE_MIN}, {TPS_REG_BUCK2CTRL, TPS_VCORE_SAFE}};
 uint8_t retval[4] = {0, 0, 0, 0};
 uint8_t ret_i = 0;
 
@@ -90,11 +89,11 @@ static void irq_uart_glitch(void) {
 			bool irq_state = irq_is_enabled(UART_TARGET_IRQ);
 			irq_set_enabled(UART_TARGET_IRQ, false);
 
-			// busy_wait_us_32(glitch.ext_offset); // TODO decomment
-			int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, pmbus_cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
-			// busy_wait_us_32(glitch.width); // TODO decomment
-			// busy_wait_us_32(1000);
-			int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, pmbus_cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
+			busy_wait_us_32(glitch.ext_offset);
+			int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
+			busy_wait_us_32(glitch.width);
+			int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
+
 			irq_set_enabled(UART_TARGET_IRQ, irq_state);
 		} else {
 			target_state = TARGET_UNKNOWN;	// Go back to base state
