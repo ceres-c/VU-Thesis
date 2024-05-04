@@ -30,7 +30,7 @@ P_CMD_PONG					= b'\x63'	# Response to ping
 
 P_CMD_PING					= b'\x70'	# Ping picocoder
 
-class GlitchResult(Enum):
+class GlitchResult(str, Enum): # str is needed to allow the enum to be a dict key (for the legend)
 	TIMEOUT		= 0
 	TIMEOUT2	= 1
 	RESET		= 2
@@ -38,14 +38,14 @@ class GlitchResult(Enum):
 	WEIRD		= 4
 	SUCCESS		= 5
 
-def result_to_plt(result: GlitchResult) -> str:
+def result_to_marker(result: GlitchResult) -> str:
 	'''
 	Convert a GlitchResult to a matplotlib-compatible scatter plot marker
 	'''
 	dic = {
 		GlitchResult.SUCCESS: 'og',
 		GlitchResult.RESET: 'xr',
-		GlitchResult.NORMAL: 'yb',
+		GlitchResult.NORMAL: '1b',
 		GlitchResult.WEIRD: '<y',
 		GlitchResult.TIMEOUT: '^r',
 		GlitchResult.TIMEOUT2: '^c',
@@ -56,7 +56,6 @@ class GlitchController:
 	def __init__(self, groups: list[str], parameters: list[str]):
 		self.groups = groups
 		self.params = {param: {'start': 0, 'end': 0, 'step': 1} for param in parameters}
-		self.results_types: set[GlitchResult] = set() # For legend plotting
 		self.results: list[tuple[tuple[int, ...], GlitchResult]] = []
 
 	def set_range(self, param: str, start: int, end: int) -> None:
@@ -77,20 +76,7 @@ class GlitchController:
 		yield from product(*ranges) # type: ignore
 
 	def add_result(self, glitch_values: tuple[int, ...], result: GlitchResult):
-		self.results_types.add(result)
 		self.results.append((glitch_values, result))
-
-	def get_legend_elements(self) -> list[str]:
-		'''
-		Get a legend with matching markers and colors that can be plotted with
-		`ax.legend(handles=gc.get_legend_elements())`
-		'''
-		#plt.Line2D([0], [0], marker='o', color='w', label=result_to_legend(result), markerfacecolor='blue', markersize=10
-		ret = []
-		for r_t in self.results_types:
-			[marker, color] = [*result_to_plt(r_t)]
-			ret.append(Line2D([0], [0], marker=marker, color='w', label=r_t.name, markerfacecolor=color, markersize=10))
-		return ret
 
 class GlitchyMcGlitchFace:
 	s: serial.Serial = None # type: ignore
