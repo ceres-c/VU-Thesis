@@ -1,6 +1,6 @@
 from enum import Enum
-from itertools import product
-from typing import Annotated, Optional
+from itertools import islice, product
+from typing import Annotated, Iterator
 import random
 import struct
 
@@ -69,11 +69,25 @@ class GlitchController:
 			raise ValueError(f'Parameter {param} not found')
 		self.params[param]['step'] = step
 
-	def rand_glitch_values(self) -> tuple[int, ...]: # type: ignore
-		ranges = [list(range(param['start'], param['end'] + 1, param['step'])) for param in self.params.values()]
-		for r in ranges:
-			random.shuffle(r)
-		yield from product(*ranges) # type: ignore
+	def rand_glitch_values_inf(self) -> Iterator[tuple[int, ...]]:
+		'''
+		Generates an infinite sequence of random glitch values
+		'''
+		while True:
+			yield tuple(random.randrange(param['start'], param['end'] + 1, param['step']) for param in self.params.values())
+
+	def rand_glitch_values(self) -> Iterator[tuple[int, ...]]:
+		'''
+		Generates a finite sequence of random glitch values covering the entire parameter space exactly once
+		NOTE: Highly inefficient for large parameter spaces
+		'''
+		combinations = list(product(
+			*(range(param['start'], param['end'] + 1, param['step']) for param in self.params.values())
+		))
+		random.shuffle(combinations)
+		for combination in combinations:
+			yield combination
+
 
 	def add_result(self, glitch_values: tuple[int, ...], result: GlitchResult):
 		self.results.append((glitch_values, result))
@@ -148,6 +162,7 @@ class GlitchyMcGlitchFace:
 
 		[self.ext_offset, self.width] = [*glitch_setting]
 
+		self.s.reset_input_buffer() # Clear any pending data, just in case
 		self.s.write(P_CMD_ARM)
 
 		data = self.s.read(1)
