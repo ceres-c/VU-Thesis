@@ -18,6 +18,8 @@ P_CMD_SET_VOLTAGE			= b'\x23'	# Set glitch voltage
 P_CMD_SET_EXT_OFFST			= b'\x24'	# Set external offset (wait after trig.) in us
 P_CMD_SET_WIDTH				= b'\x25'	# Set glitch width	(duration of glitch) in us
 
+P_CMD_PING					= b'\x70'	# Ping picocoder
+
 P_CMD_RESULT_RESET			= b'\x50'	# Target reset
 P_CMD_RESULT_ALIVE			= b'\x51'	# Target alive (data will follow)
 P_CMD_RESULT_DEAD			= b'\x52'	# Target dead
@@ -32,27 +34,28 @@ P_CMD_RETURN_OK				= b'\x61'	# Command successful
 P_CMD_RETURN_KO				= b'\x62'	# Command failed
 P_CMD_PONG					= b'\x63'	# Response to ping
 
-P_CMD_PING					= b'\x70'	# Ping picocoder
-
 class GlitchResult(str, Enum): # str is needed to allow the enum to be a dict key (for the legend)
-	RESET			= 0
-	NORMAL			= 1
-	WEIRD			= 2
-	SUCCESS			= 3
-	BROKEN			= 4
-	DEAD			= 5
+	'''
+	Glitch result (processed from raw picocoder return codes)
+	'''
+	RESET					= 0
+	NORMAL					= 1
+	WEIRD					= 2
+	SUCCESS					= 3
+	BROKEN					= 4
+	DEAD					= 5
 
 def result_to_marker(result: GlitchResult) -> str:
 	'''
 	Convert a GlitchResult to a matplotlib-compatible scatter plot marker
 	'''
 	dic = {
-		GlitchResult.RESET: 'xr',
-		GlitchResult.NORMAL: '1b',
-		GlitchResult.WEIRD: '<y',
-		GlitchResult.SUCCESS: 'og',
-		GlitchResult.BROKEN: 'Dm',
-		GlitchResult.DEAD: 'sk',
+		GlitchResult.RESET		: 'xr',
+		GlitchResult.NORMAL		: '1b',
+		GlitchResult.WEIRD		: '<y',
+		GlitchResult.SUCCESS	: 'og',
+		GlitchResult.BROKEN		: 'Dm',
+		GlitchResult.DEAD		: 'sk',
 	}
 	return dic[result]
 
@@ -119,6 +122,7 @@ class GlitchyMcGlitchFace:
 		if self._ext_offset == value:
 			return
 		self._ext_offset = value
+		self.s.reset_input_buffer()
 		self.s.write(struct.pack('<BI', struct.unpack('B', P_CMD_SET_EXT_OFFST)[0], value))
 		if self.s.read(1) != P_CMD_RETURN_OK:
 			raise ValueError('Could not set external offset')
@@ -137,6 +141,7 @@ class GlitchyMcGlitchFace:
 		if self._width == value:
 			return
 		self._width = value
+		self.s.reset_input_buffer()
 		self.s.write(struct.pack('<BI', struct.unpack('B', P_CMD_SET_WIDTH)[0], value))
 		if self.s.read(1) != P_CMD_RETURN_OK:
 			raise ValueError('Could not set width')
