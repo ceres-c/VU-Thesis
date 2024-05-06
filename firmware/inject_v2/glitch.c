@@ -5,6 +5,8 @@ glitch_t glitch = {0, 0, {TPS_REG_BUCK2CTRL, TPS_VCORE_MIN}, {TPS_REG_BUCK2CTRL,
 uint8_t retval[4] = {0, 0, 0, 0};
 uint8_t ret_i = 0;
 
+#define UART_HW_NO_INPUT 0x100
+
 inline static void uart_hw_write(uint8_t data) {
 	UART_TARGET_PTR->dr = data;
 }
@@ -19,27 +21,13 @@ inline static volatile uint8_t uart_hw_read_blocking(void) {
 		tight_loop_contents();
 	return uart_hw_read();
 }
-inline static volatile uint8_t uart_hw_read_timeout_cycles(uint32_t timeout_cycles) {
+inline static volatile uint16_t uart_hw_read_timeout_cycles(uint32_t timeout_cycles) {
 	for (uint32_t i = 0; i < timeout_cycles; i++) {
 		if (uart_hw_readable())
 			return uart_hw_read();
 	}
-	return STDIO_NO_INPUT;
+	return UART_HW_NO_INPUT;
 }
-static uint32_t uart_getu32_timeout_cycles(uint32_t timeout_cycles) {
-	bool irq_state = irq_is_enabled(UART_TARGET_IRQ);
-	irq_set_enabled(UART_TARGET_IRQ, false);
-	uint32_t c1 = uart_hw_read_timeout_cycles(timeout_cycles);
-	uint32_t c2 = uart_hw_read_timeout_cycles(timeout_cycles);
-	uint32_t c3 = uart_hw_read_timeout_cycles(timeout_cycles);
-	uint32_t c4 = uart_hw_read_timeout_cycles(timeout_cycles);
-	irq_set_enabled(UART_TARGET_IRQ, irq_state);
-	if (c1 == STDIO_NO_INPUT || c2 == STDIO_NO_INPUT || c3 == STDIO_NO_INPUT || c4 == STDIO_NO_INPUT)
-		return STDIO_NO_INPUT;
-	return c1 | (c2<<8) | (c3<<16) | (c4<<24);
-}
-
-static void irq_uart_glitch(void);
 
 void target_uart_init(void) {
 	uart_init(UART_TARGET, UART_TARGET_BAUD);
@@ -48,12 +36,9 @@ void target_uart_init(void) {
 	uart_set_format(UART_TARGET, UART_TARGET_DATA_BITS, UART_TARGET_STOP_BITS, UART_TARGET_PARITY);
 	uart_set_fifo_enabled(UART_TARGET, false); // Char by char
 
-	// RX interrupt
 	target_state = TARGET_IGNORE;
 	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
 		uart_getc(UART_TARGET);
-	irq_set_exclusive_handler(UART_TARGET_IRQ, irq_uart_glitch);
-	irq_set_enabled(UART_TARGET_IRQ, true);
 }
 
 void uart_echo(void) {
@@ -70,59 +55,75 @@ void uart_echo(void) {
 	}
 }
 
-static void irq_uart_glitch(void) {
-	uint8_t data = uart_hw_read_blocking();
+bool glitch_sync(void) {
+	volatile uint8_t data;
+	uint32_t t;
 
-	switch (target_state) {
-	case TARGET_UNKNOWN:
-		if (data == T_CMD_RESET) {			// Target is starting over
-			target_state = TARGET_READY;
-			uart_hw_write(T_CMD_CONNECT);	// ACK connection
-		} else {							// Sometimes we get garbage when the board boots
-			target_state = TARGET_UNKNOWN;
-			uart_hw_write(T_CMD_BOGUS1);	// Random byte to reset the target
-		}
-		break;
-	case TARGET_READY:
-		if (data == T_CMD_TRIGGER) {		// Target is telling us to glitch
-			target_state = TARGET_GLITCHED;
-			bool irq_state = irq_is_enabled(UART_TARGET_IRQ);
-			irq_set_enabled(UART_TARGET_IRQ, false);
+	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
+		uart_getc(UART_TARGET);
 
-			busy_wait_us_32(glitch.ext_offset);
-			int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
-			busy_wait_us_32(glitch.width);
-			int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
+	// Connect to target
+	t = time_us_32();
+	do {
+		if (uart_hw_readable()) goto reachable;
+	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	putchar(P_CMD_RESULT_UNREACHABLE);
+	return false;
 
-			irq_set_enabled(UART_TARGET_IRQ, irq_state);
-		} else {
-			target_state = TARGET_UNKNOWN;	// Go back to base state
-			uart_hw_write(T_CMD_BOGUS2);	// Random byte to reset the target
-		}
-		break;
-	case TARGET_GLITCHED:
-		target_state = TARGET_IGNORE;
-		if (data == T_CMD_RESET) {			// Target died
-			putchar(P_CMD_RESULT_RESET);
-			uart_hw_write(T_CMD_CONNECT);	// Send connection ack
-		} else if (data == T_CMD_ALIVE) {	// Target is still alive!
-			uint32_t response = uart_getu32_timeout_cycles(READ_TIMEOUT_CYCLES); // At 115200 baud, each byte 8N1 takes 78us. Well within this timeout
-			// uint32_t response = uart_getu32();
-			if (response == STDIO_NO_INPUT) {
-				putchar(P_CMD_RESULT_DATA_TIMEOUT);
-			} else {
-				putchar(P_CMD_RESULT_ALIVE);
-				putu32(response);
-			}
-		} else {							// Huh?
-			putchar(P_CMD_RESULT_WEIRD);
-			uart_hw_write(T_CMD_BOGUS3);	// Random byte to reset the target
-		}
-		break;
-	case TARGET_IGNORE:
-	default:
-		break;
+	reachable:
+	data = uart_hw_read();
+	if (data != T_CMD_RESET) {
+		putchar(P_CMD_RESULT_UNCONNECTABLE);
+		return false;
+	}
+	uart_hw_write(T_CMD_CONNECT); // ACK connection
+
+	// Wait for trigger
+	t = time_us_32();
+	do {
+		if (uart_hw_readable()) goto triggered;
+	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	putchar(P_CMD_RESULT_UNTRIGGERED);
+	return false;
+
+	triggered:
+	data = uart_hw_read(); // Clear the RX FIFO
+	busy_wait_us_32(glitch.ext_offset);
+	int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
+	busy_wait_us_32(glitch.width);
+	int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
+
+	if (write_glitch_res != TPS_WRITE_REG_CMD_LEN || write_restore_res != TPS_WRITE_REG_CMD_LEN) {
+		putchar(P_CMD_RESULT_PMIC_FAIL);
+		return false;
 	}
 
-	return;
+	// Check if target is still alive
+	t = time_us_32();
+	do {
+		if (uart_hw_readable()) goto alive;
+	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	putchar(P_CMD_RESULT_DEAD);
+	return false;
+
+	alive:
+	data = uart_hw_read();
+	if (data == T_CMD_ALIVE) {
+		uint16_t c1 = uart_hw_read_timeout_cycles(READ_TIMEOUT_CYCLES);
+		uint16_t c2 = uart_hw_read_timeout_cycles(READ_TIMEOUT_CYCLES);
+		uint16_t c3 = uart_hw_read_timeout_cycles(READ_TIMEOUT_CYCLES);
+		uint16_t c4 = uart_hw_read_timeout_cycles(READ_TIMEOUT_CYCLES);
+		if (c1 == UART_HW_NO_INPUT || c2 == UART_HW_NO_INPUT || c3 == UART_HW_NO_INPUT || c4 == UART_HW_NO_INPUT)
+			putchar(P_CMD_RESULT_DATA_TIMEOUT);
+		else {
+			putchar(P_CMD_RESULT_ALIVE);
+			putu32(c1 | (c2<<8) | (c3<<16) | (c4<<24));
+		}
+	} else if (data == T_CMD_RESET) {
+		putchar(P_CMD_RESULT_RESET);
+	} else {
+		putchar(P_CMD_RESULT_ZOMBIE);
+	}
+	return true;
 }
+

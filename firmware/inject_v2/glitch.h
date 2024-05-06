@@ -5,8 +5,8 @@
 #include "cmd.h"
 #include "pmbus.h"
 
-#define STDIO_NO_INPUT -2
 #define READ_TIMEOUT_CYCLES 5000 // At the standard 125MHz, this is 8ns*5000 = 40us (plus loop overhead)
+#define TARGET_REACHABLE_US	7000 // The target sends a `R` every 3ms, if after 7ms we haven't seen it, it's dead
 
 typedef enum {
 	TARGET_IGNORE,		// Disarmed
@@ -26,6 +26,7 @@ extern glitch_t glitch;
 
 void target_uart_init(void);
 void uart_echo(void);
+bool glitch_sync(void);
 
 static inline void uart_level_shifter_enable(void) {
 	*SET_GPIO_ATOMIC = 1 << PIN_UART_OE;
@@ -33,15 +34,10 @@ static inline void uart_level_shifter_enable(void) {
 static inline void uart_level_shifter_disable(void) {
 	*CLR_GPIO_ATOMIC = 1 << PIN_UART_OE;
 }
-static inline void glitcher_arm(void) {
+static inline bool glitcher_arm(void) {
 	target_state = TARGET_UNKNOWN;
 	uart_level_shifter_enable();
-	uart_set_irq_enables(UART_TARGET, true, false);
-}
-static inline void glitcher_disarm(void) {
-	uart_set_irq_enables(UART_TARGET, false, false);
-	uart_level_shifter_disable();
-	target_state = TARGET_IGNORE;
+	return glitch_sync();
 }
 
 #endif // _GLITCH_H

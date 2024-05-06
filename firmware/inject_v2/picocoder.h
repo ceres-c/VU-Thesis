@@ -19,7 +19,6 @@
 
 #define SPI_PIO					pio1
 #define UART_TARGET				uart0
-#define UART_TARGET_IRQ			UART0_IRQ
 #define I2C_PMBUS				i2c0
 #define PMBUS_BAUD				1000000 // 1 MHz
 #define UART_TARGET_PTR			((uart_hw_t *)UART_TARGET)
@@ -38,6 +37,7 @@
 #define PIN_SPI_MOSI	27	// Pin 32
 #define PIN_SPI_SCK		26	// Pin 31
 #define PIN_SPI_CS		22	// Pin 29
+#define PIN_DEBUG		16	// Pin 21
 #define BUS_SPI			(1 << 3)
 #define S_SUPPORTED_BUS	BUS_SPI
 #define S_CMD_MAP ( \

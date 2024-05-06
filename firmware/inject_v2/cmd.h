@@ -26,7 +26,6 @@
 
 // picocode glitching commands
 #define P_CMD_ARM					0x20	/* Enable glitch handler						*/
-#define P_CMD_DISARM				0x21	/* Disable glitch handler						*/
 #define P_CMD_FORCE					0x22	/* Force write to PMBus to perform a glitch		*/
 #define P_CMD_SET_VOLTAGE			0x23	/* Set glitch voltage							*/
 #define P_CMD_SET_EXT_OFFST			0x24	/* Set external offset (wait after trig.) in us	*/
@@ -35,8 +34,13 @@
 // picocode glitch results
 #define P_CMD_RESULT_RESET			0x50	/* Target reset									*/
 #define P_CMD_RESULT_ALIVE			0x51	/* Target alive (data will follow)				*/
-#define P_CMD_RESULT_WEIRD			0x52	/* Target weird									*/
-#define P_CMD_RESULT_DATA_TIMEOUT	0x53	/* Target timeout (e.g. target already sent post-glitch data) */
+#define P_CMD_RESULT_DEAD			0x52	/* Target dead									*/
+#define P_CMD_RESULT_ZOMBIE			0x53	/* Target is nor alive nor it reset after glitch */
+#define P_CMD_RESULT_DATA_TIMEOUT	0x54	/* Target timeout after glitch when sending data back (target is alive) */
+#define P_CMD_RESULT_UNREACHABLE	0x55	/* Target unavailable when starting glitch: did not receive anything on the serial port */
+#define P_CMD_RESULT_UNCONNECTABLE	0x56	/* Target unavailable when starting glitch: did not receive the expected connection command */
+#define P_CMD_RESULT_UNTRIGGERED	0x57	/* No trigger received after connection was established */
+#define P_CMD_RESULT_PMIC_FAIL		0x58	/* Could not send command to PMIC				*/
 
 // picocode command responses
 #define P_CMD_RETURN_OK				0x61	/* Command successful							*/

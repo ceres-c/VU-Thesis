@@ -123,9 +123,6 @@ void process(pio_spi_inst_t *spi, int command) {
 		case P_CMD_ARM:
 			glitcher_arm();
 			break;
-		case P_CMD_DISARM:
-			glitcher_disarm();
-			break;
 		case P_CMD_FORCE:
 			busy_wait_us_32(glitch.ext_offset);
 			int write_glitch_res = i2c_write_timeout_us(
@@ -159,7 +156,6 @@ void process(pio_spi_inst_t *spi, int command) {
 			putchar(P_CMD_RETURN_OK);
 			break;
 		case P_CMD_UART_ECHO:
-			glitcher_disarm();
 			uart_echo();
 			break;
 		case P_CMD_PING:
@@ -187,12 +183,14 @@ static void init_pins() {
 	gpio_set_function(PIN_PMBUS_SCL, GPIO_FUNC_I2C);
 	gpio_set_function(PIN_UART_OE, GPIO_FUNC_SIO);
 	gpio_set_function(PIN_LED, GPIO_FUNC_SIO);
+	gpio_set_function(PIN_DEBUG, GPIO_FUNC_SIO); // TODO remove when done debugging
 
 	gpio_put(PIN_UART_OE, 0);
 	gpio_put(PIN_LED, 0);
 
 	gpio_set_dir(PIN_UART_OE, GPIO_OUT);
 	gpio_set_dir(PIN_LED, GPIO_OUT);
+	gpio_set_dir(PIN_DEBUG, GPIO_OUT);
 }
 
 int main() {

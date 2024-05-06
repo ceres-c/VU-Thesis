@@ -1,10 +1,9 @@
-from enum import Enum
-from itertools import islice, product
-from typing import Annotated, Iterator
 import random
 import struct
+from enum import Enum
+from itertools import product
+from typing import Annotated, Iterator
 
-from matplotlib.pyplot import Line2D
 import serial
 
 P_CMD_ARM					= b'\x20'
@@ -21,8 +20,13 @@ P_CMD_SET_WIDTH				= b'\x25'	# Set glitch width	(duration of glitch) in us
 
 P_CMD_RESULT_RESET			= b'\x50'	# Target reset
 P_CMD_RESULT_ALIVE			= b'\x51'	# Target alive (data will follow)
-P_CMD_RESULT_WEIRD			= b'\x52'	# Target weird
-P_CMD_RESULT_DATA_TIMEOUT	= b'\x53'	# Target timeout (e.g. target already sent post-glitch data)
+P_CMD_RESULT_DEAD			= b'\x52'	# Target dead
+P_CMD_RESULT_ZOMBIE			= b'\x53'	# Target is nor alive nor it reset after glitch
+P_CMD_RESULT_DATA_TIMEOUT	= b'\x54'	# Target timeout after glitch when sending data back (target is alive)
+P_CMD_RESULT_UNREACHABLE	= b'\x55'	# Target unavailable when starting glitch: did not receive anything on the serial port
+P_CMD_RESULT_UNCONNECTABLE	= b'\x56'	# Target unavailable when starting glitch: did not receive the expected connection command
+P_CMD_RESULT_UNTRIGGERED	= b'\x57'	# No trigger received after connection was established
+P_CMD_RESULT_PMIC_FAIL		= b'\x58'	# Could not send command to PMIC
 
 P_CMD_RETURN_OK				= b'\x61'	# Command successful
 P_CMD_RETURN_KO				= b'\x62'	# Command failed
@@ -31,24 +35,24 @@ P_CMD_PONG					= b'\x63'	# Response to ping
 P_CMD_PING					= b'\x70'	# Ping picocoder
 
 class GlitchResult(str, Enum): # str is needed to allow the enum to be a dict key (for the legend)
-	TIMEOUT		= 0
-	TIMEOUT2	= 1
-	RESET		= 2
-	NORMAL		= 3
-	WEIRD		= 4
-	SUCCESS		= 5
+	RESET			= 0
+	NORMAL			= 1
+	WEIRD			= 2
+	SUCCESS			= 3
+	BROKEN			= 4
+	DEAD			= 5
 
 def result_to_marker(result: GlitchResult) -> str:
 	'''
 	Convert a GlitchResult to a matplotlib-compatible scatter plot marker
 	'''
 	dic = {
-		GlitchResult.SUCCESS: 'og',
 		GlitchResult.RESET: 'xr',
 		GlitchResult.NORMAL: '1b',
 		GlitchResult.WEIRD: '<y',
-		GlitchResult.TIMEOUT: '^r',
-		GlitchResult.TIMEOUT2: '^c',
+		GlitchResult.SUCCESS: 'og',
+		GlitchResult.BROKEN: 'Dm',
+		GlitchResult.DEAD: 'sk',
 	}
 	return dic[result]
 
@@ -167,20 +171,24 @@ class GlitchyMcGlitchFace:
 
 		data = self.s.read(1)
 		if not data:
-			return GlitchResult.TIMEOUT, None
+			raise ConnectionError('Could not connect to picocoder')
+
 		if data == P_CMD_RESULT_RESET:
 			return GlitchResult.RESET, None
 		if data == P_CMD_RESULT_ALIVE:
 			ret_data = self.s.read(4)
 			if not ret_data:
-				return GlitchResult.TIMEOUT2, None
+				raise ConnectionError('Did not receive data from picocoder after P_CMD_RESULT_ALIVE')
 			ret_val = struct.unpack("<I", ret_data)[0]
 			if ret_val == expected:
 				return GlitchResult.NORMAL, None
 			else:
 				return GlitchResult.SUCCESS, ret_val
-		if data == P_CMD_RESULT_WEIRD:
-			return GlitchResult.WEIRD, None
-		if data == P_CMD_RESULT_DATA_TIMEOUT:
-			return GlitchResult.TIMEOUT, None
+		if data == P_CMD_RESULT_DEAD:
+			# TODO reset target?
+			return GlitchResult.DEAD, data
+		if data in [P_CMD_RESULT_DEAD, P_CMD_RESULT_ZOMBIE, P_CMD_RESULT_DATA_TIMEOUT, P_CMD_RESULT_UNREACHABLE,
+			  P_CMD_RESULT_UNCONNECTABLE, P_CMD_RESULT_UNTRIGGERED, P_CMD_RESULT_PMIC_FAIL]:
+			# TODO reset target?
+			return GlitchResult.BROKEN, data
 		return GlitchResult.WEIRD, data
