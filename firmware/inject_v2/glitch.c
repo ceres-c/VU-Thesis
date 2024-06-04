@@ -6,7 +6,7 @@ uint8_t retval[4] = {0, 0, 0, 0};
 uint8_t ret_i = 0;
 
 #define UART_HW_NO_INPUT 0x100
-#define ESTIMATE_ROUNDS 25
+#define ESTIMATE_ROUNDS 100
 #define PICO_RX_TIME 1 // Time in us between data being on the channel and it's available to the Pico RX FIFO (measured with oscilloscope)
 
 inline static void uart_hw_write(uint8_t data) {
@@ -250,9 +250,7 @@ int estimate_offset(void) {
 	}
 
 	uart_level_shifter_disable();
-	loop_duration = standard_median - standard_median;
-	putu32(standard_median); // TODO remove
-	putu32(extra_delay_median); // TODO remove
+	loop_duration = extra_delay_median - standard_median;
 
 	// return loop_duration - PICO_RX_TIME; // TODO calculate PICO_RX_TIME and decomment
 	return loop_duration;

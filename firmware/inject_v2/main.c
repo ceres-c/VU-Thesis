@@ -162,7 +162,7 @@ void process(pio_spi_inst_t *spi, int command) {
 			putchar(P_CMD_PONG);
 			break;
 		case P_CMD_ESTIMATE_OFFSET:
-			estimate_offset();
+			putu32(estimate_offset());
 			break;
 		default:
 			putchar(S_NAK);
