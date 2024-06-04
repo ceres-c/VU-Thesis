@@ -6,6 +6,8 @@ uint8_t retval[4] = {0, 0, 0, 0};
 uint8_t ret_i = 0;
 
 #define UART_HW_NO_INPUT 0x100
+#define ESTIMATE_ROUNDS 25
+#define PICO_RX_TIME 1 // Time in us between data being on the channel and it's available to the Pico RX FIFO (measured with oscilloscope)
 
 inline static void uart_hw_write(uint8_t data) {
 	UART_TARGET_PTR->dr = data;
@@ -127,3 +129,131 @@ bool glitch_sync(void) {
 	return true;
 }
 
+static void sort(uint32_t *arr, int n) {
+	for (int i = 0; i < n; i++) {
+		for (int j = i + 1; j < n; j++) {
+			if (arr[i] > arr[j]) {
+				uint32_t temp = arr[i];
+				arr[i] = arr[j];
+				arr[j] = temp;
+			}
+		}
+	}
+}
+
+int estimate_offset(void) {
+	/*
+	 * This function gives a rough estimate for the glitch offset parameter.
+	 * It takes into account:
+	 *  - The time length of the fixed loop in the target firmware that happens
+	 *    after the byte `T_CMD_RESET` is sent by the target.
+	 *  - The reaction time of the pico to data on the UART channel (time between
+	 *    the data being on the channel and it being available to the Pico RX FIFO).
+	 *
+	 * It does not consider the time at the target between writing to the UART
+	 * TX FIFO and the data appearing on the channel. This means that  the interesting
+	 * offset will be slightly smaller than the one estimated by this function.
+	 *
+	 * Returns:
+	 *  - >0: the estimated offset in us
+	 *  - -1: target is unreachable
+	 *  - -2: measured time without the loop is greater or equal to the standard time,
+	 *        can't estimate the duration of the wait loop on the target
+	*/
+	uint32_t t;
+	volatile uint8_t data; // Used to flush the RX FIFO
+	uint32_t measurements[ESTIMATE_ROUNDS];
+	uint32_t standard_median = 0, extra_delay_median = 0, loop_duration = 0;
+
+	uart_level_shifter_enable();
+
+	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
+		uart_getc(UART_TARGET);
+
+	// Calculate median time between two resets in standard conditions
+	for (int i = 0; i < ESTIMATE_ROUNDS; i++) {
+		// Wait for connection init from target
+		t = time_us_32();
+		do {
+			if (uart_hw_readable()) goto reachable;
+		} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+		return -1;
+
+		reachable:
+		uint32_t t1 = time_us_32();
+		data = uart_hw_read();
+		// Don't send anything, now the target will wait for timeout and then reset
+
+		t = time_us_32();
+		do {
+			if (uart_hw_readable()) goto reachable2;
+		} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+		return -1;
+
+		reachable2:
+		uint32_t t2 = time_us_32();
+		data = uart_hw_read();
+
+		measurements[i] = t2 - t1;
+	}
+	sort(measurements, ESTIMATE_ROUNDS);
+	standard_median = measurements[ESTIMATE_ROUNDS / 2];
+
+	// Now we will measure the time between two resets when the target adds a fixed delay
+	// (same as the one used in the glitching routine) between two resets.
+	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
+		uart_getc(UART_TARGET);
+
+	// Wait for connection init from target, we need to instruct the target to skip the loop
+	t = time_us_32();
+	do {
+		if (uart_hw_readable()) goto send_cmd;
+	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	return -1;
+
+	send_cmd:
+	data = uart_hw_read();
+	uart_hw_write(T_CMD_EXTRA_WAIT); // Tell the target to skip the loop on next reset
+
+	for (int i = 0; i < ESTIMATE_ROUNDS; i++) {
+		// Wait for connection init from target
+		t = time_us_32();
+		do {
+			if (uart_hw_readable()) goto reachable3;
+		} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+		return -1;
+
+		reachable3:
+		uint32_t t1 = time_us_32();
+		data = uart_hw_read();
+		// Don't send anything, now the target will wait for timeout + extra delay, and then reset
+
+		t = time_us_32();
+		do {
+			if (uart_hw_readable()) goto reachable4;
+		} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+		return -1;
+
+		reachable4:
+		uint32_t t2 = time_us_32();
+		data = uart_hw_read();
+		uart_hw_write(T_CMD_EXTRA_WAIT); // Tell the target to skip the loop on next reset
+
+		measurements[i] = t2 - t1;
+	}
+	sort(measurements, ESTIMATE_ROUNDS);
+	extra_delay_median = measurements[ESTIMATE_ROUNDS / 2];
+
+	if (standard_median >= extra_delay_median) {
+		uart_level_shifter_disable();
+		return -2;
+	}
+
+	uart_level_shifter_disable();
+	loop_duration = standard_median - standard_median;
+	putu32(standard_median); // TODO remove
+	putu32(extra_delay_median); // TODO remove
+
+	// return loop_duration - PICO_RX_TIME; // TODO calculate PICO_RX_TIME and decomment
+	return loop_duration;
+}

@@ -27,6 +27,7 @@ extern glitch_t glitch;
 void target_uart_init(void);
 void uart_echo(void);
 bool glitch_sync(void);
+int estimate_offset(void);
 
 static inline void uart_level_shifter_enable(void) {
 	*SET_GPIO_ATOMIC = 1 << PIN_UART_OE;
@@ -39,5 +40,6 @@ static inline bool glitcher_arm(void) {
 	uart_level_shifter_enable();
 	return glitch_sync();
 }
+
 
 #endif // _GLITCH_H

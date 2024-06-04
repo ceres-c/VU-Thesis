@@ -19,6 +19,8 @@ P_CMD_SET_EXT_OFFST			= b'\x24'	# Set external offset (wait after trig.) in us
 P_CMD_SET_WIDTH				= b'\x25'	# Set glitch width	(duration of glitch) in us
 
 P_CMD_PING					= b'\x70'	# Ping picocoder
+P_CMD_UART_ECHO				= b'\x75'	# Set picocoder in UART echo mode (need power cycle to exit)
+P_CMD_ESTIMATE_OFFSET		= b'\x76'	# Estimate glitch offset (see fw code to know what this does)
 
 P_CMD_RESULT_RESET			= b'\x50'	# Target reset
 P_CMD_RESULT_ALIVE			= b'\x51'	# Target alive (data will follow)

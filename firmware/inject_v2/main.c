@@ -161,6 +161,9 @@ void process(pio_spi_inst_t *spi, int command) {
 		case P_CMD_PING:
 			putchar(P_CMD_PONG);
 			break;
+		case P_CMD_ESTIMATE_OFFSET:
+			estimate_offset();
+			break;
 		default:
 			putchar(S_NAK);
 	}
