@@ -28,6 +28,7 @@ void target_uart_init(void);
 void uart_echo(void);
 bool glitch_sync(void);
 int estimate_offset(void);
+bool uart_debug_pin_toggle(void);
 
 static inline void uart_level_shifter_enable(void) {
 	*SET_GPIO_ATOMIC = 1 << PIN_UART_OE;

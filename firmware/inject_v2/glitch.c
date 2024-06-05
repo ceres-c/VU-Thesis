@@ -159,7 +159,7 @@ int estimate_offset(void) {
 	 *  - -1: target is unreachable
 	 *  - -2: measured time without the loop is greater or equal to the standard time,
 	 *        can't estimate the duration of the wait loop on the target
-	*/
+	 */
 	uint32_t t;
 	volatile uint8_t data; // Used to flush the RX FIFO
 	uint32_t measurements[ESTIMATE_ROUNDS];
@@ -254,4 +254,21 @@ int estimate_offset(void) {
 
 	// return loop_duration - PICO_RX_TIME; // TODO calculate PICO_RX_TIME and decomment
 	return loop_duration;
+}
+
+bool uart_debug_pin_toggle(void) {
+	/*
+	 * This function can be used to measure (externally) the time between the data
+	 * being sent on the UART channel and the data being available to the Pico.
+	 */
+	uint32_t t = time_us_32();
+	do {
+		if (uart_hw_readable()) goto toggle;
+	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+
+	toggle:
+	volatile uint8_t data = uart_hw_read();
+	*XOR_GPIO_ATOMIC = PIN_DEBUG_MASK;
+
+	return true;
 }

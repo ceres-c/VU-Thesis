@@ -51,6 +51,7 @@
 #define P_CMD_PING					0x70	/* Ping from host to picocoder					*/
 #define P_CMD_UART_ECHO				0x75	/* Echo UART data from target to USB			*/
 #define P_CMD_ESTIMATE_OFFSET		0x76	/* Estimate the offset to the glitch point (ballpark) */
+#define P_CMD_UART_DEBUG_TOGGLE		0x77	/* Toggle debug pin on UART data in				*/
 
 // Commands to/from the target board
 #define T_CMD_RESET					'R'

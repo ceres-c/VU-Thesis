@@ -38,6 +38,7 @@
 #define PIN_SPI_SCK		26	// Pin 31
 #define PIN_SPI_CS		22	// Pin 29
 #define PIN_DEBUG		16	// Pin 21
+#define PIN_DEBUG_MASK	(1 << PIN_DEBUG)
 #define BUS_SPI			(1 << 3)
 #define S_SUPPORTED_BUS	BUS_SPI
 #define S_CMD_MAP ( \
