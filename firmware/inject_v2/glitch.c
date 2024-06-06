@@ -256,44 +256,18 @@ int estimate_offset(void) {
 	return loop_duration;
 }
 
-bool irq_called = false;
-// void __no_inline_not_in_flash_func(uart_callback)() {
-void uart_callback() {
-	gpio_xor_mask(PIN_DEBUG_MASK);
-	// uart_get_hw(UART_TARGET)->icr = UART_UARTICR_RXIC_BITS ;
-	volatile uint8_t d = uart_get_hw(UART_TARGET)->dr; // Clear the interrupt
-	// uart_get_hw(UART_TARGET)->icr = UART_UARTICR_RXIC_BITS; // Clear the interrupt
-	// uart_get_hw(UART_TARGET)->icr = 0b11111111111; // Clear the interrupt
-	// uart_get_hw(UART_TARGET)->icr = 0; // Clear the interrupt
-	irq_called = true;
-}
-
-bool uart_debug_pin_toggle(void) {
+bool __no_inline_not_in_flash_func(uart_debug_pin_toggle)(void) {
 	/*
 	 * This function can be used to measure (externally) the time between the data
 	 * being sent on the UART channel and the data being available to the Pico.
 	 */
-	// uart_level_shifter_enable();
-	// uint32_t t = time_us_32();
-	// do {
-	// 	if (uart_hw_readable()) goto toggle;
-	// } while ((time_us_32() - t) <= TARGET_REACHABLE_US);
-	// uart_level_shifter_disable();
-	// return false;
-
-	// toggle:
-	// // volatile uint8_t data = uart_hw_read();
-	// *XOR_GPIO_ATOMIC = PIN_DEBUG_MASK;
-	// uart_level_shifter_disable();
-	// return true;
-
+	volatile uint8_t data;
+	data = uart_hw_read(); // Clear the RX register before starting
 	uart_level_shifter_enable();
-
-	// Set up and enable the interrupt handlers
-	irq_set_exclusive_handler(UART0_IRQ, uart_callback);
-	irq_set_enabled(UART0_IRQ, true);
-	// Now enable the UART to send interrupts - RX only
-	uart_set_irq_enables(UART_TARGET, true, false);
-
+	while(!uart_hw_readable()) {
+		tight_loop_contents();
+	}
+	gpio_xor_mask(PIN_DEBUG_MASK);
+	uart_level_shifter_disable();
 	return true;
 }
