@@ -21,6 +21,7 @@ P_CMD_SET_WIDTH				= b'\x25'	# Set glitch width	(duration of glitch) in us
 P_CMD_PING					= b'\x70'	# Ping picocoder
 P_CMD_UART_ECHO				= b'\x75'	# Set picocoder in UART echo mode (need power cycle to exit)
 P_CMD_ESTIMATE_OFFSET		= b'\x76'	# Estimate glitch offset (see fw code to know what this does)
+P_CMD_UART_DEBUG_TOGGLE		= b'\x77'	# Toggle debug pin (GPIO 16) on UART RX
 
 P_CMD_RESULT_RESET			= b'\x50'	# Target reset
 P_CMD_RESULT_ALIVE			= b'\x51'	# Target alive (data will follow)
@@ -31,6 +32,17 @@ P_CMD_RESULT_UNREACHABLE	= b'\x55'	# Target unavailable when starting glitch: di
 P_CMD_RESULT_UNCONNECTABLE	= b'\x56'	# Target unavailable when starting glitch: did not receive the expected connection command
 P_CMD_RESULT_UNTRIGGERED	= b'\x57'	# No trigger received after connection was established
 P_CMD_RESULT_PMIC_FAIL		= b'\x58'	# Could not send command to PMIC
+RESULT_NAMES = {
+	P_CMD_RESULT_RESET			: 'RESET',
+	P_CMD_RESULT_ALIVE			: 'ALIVE',
+	P_CMD_RESULT_DEAD			: 'DEAD',
+	P_CMD_RESULT_ZOMBIE			: 'ZOMBIE',
+	P_CMD_RESULT_DATA_TIMEOUT	: 'DATA TIMEOUT',
+	P_CMD_RESULT_UNREACHABLE	: 'UNREACHABLE',
+	P_CMD_RESULT_UNCONNECTABLE	: 'UNCONNECTABLE',
+	P_CMD_RESULT_UNTRIGGERED	: 'UNTRIGGERED',
+	P_CMD_RESULT_PMIC_FAIL		: 'PMIC FAIL',
+}
 
 P_CMD_RETURN_OK				= b'\x61'	# Command successful
 P_CMD_RETURN_KO				= b'\x62'	# Command failed

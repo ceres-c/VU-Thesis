@@ -7,7 +7,8 @@ uint8_t ret_i = 0;
 
 #define UART_HW_NO_INPUT 0x100
 #define ESTIMATE_ROUNDS 100
-#define PICO_RX_TIME 1 // Time in us between data being on the channel and it's available to the Pico RX FIFO (measured with oscilloscope)
+#define PICO_RX_TIME 85 // Time in us between UART data appearing on the channel and it
+						// being available to the Pico RX FIFO (measured externally)
 
 inline static void uart_hw_write(uint8_t data) {
 	UART_TARGET_PTR->dr = data;
@@ -159,6 +160,7 @@ int estimate_offset(void) {
 	 *  - -1: target is unreachable
 	 *  - -2: measured time without the loop is greater or equal to the standard time,
 	 *        can't estimate the duration of the wait loop on the target
+	 *  - -3: offset added by the loop is smaller than PICO_RX_TIME
 	 */
 	uint32_t t;
 	volatile uint8_t data; // Used to flush the RX FIFO
@@ -252,21 +254,27 @@ int estimate_offset(void) {
 	uart_level_shifter_disable();
 	loop_duration = extra_delay_median - standard_median;
 
-	// return loop_duration - PICO_RX_TIME; // TODO calculate PICO_RX_TIME and decomment
-	return loop_duration;
+	if (loop_duration < PICO_RX_TIME)
+		return -3;
+
+	return loop_duration - PICO_RX_TIME;
 }
 
 bool __no_inline_not_in_flash_func(uart_debug_pin_toggle)(void) {
 	/*
 	 * This function can be used to measure (externally) the time between the data
-	 * being sent on the UART channel and the data being available to the Pico.
+	 * being on the UART channel, and it being available to the Pico.
 	 */
-	volatile uint8_t data;
-	data = uart_hw_read(); // Clear the RX register before starting
+	volatile uint8_t data = uart_hw_read(); // Start off with a clean RX data register
 	uart_level_shifter_enable();
-	while(!uart_hw_readable()) {
-		tight_loop_contents();
-	}
+	uint32_t t = time_us_32();
+	do {
+		if (uart_hw_readable()) goto toggle;
+	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	uart_level_shifter_disable();
+	return false;
+
+	toggle:
 	gpio_xor_mask(PIN_DEBUG_MASK);
 	uart_level_shifter_disable();
 	return true;
