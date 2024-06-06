@@ -137,3 +137,9 @@ and they were 579,96273 ms apart. According to binja, 9 instructions are
 executed per cycle, and there are 1000000 cycles. That means:
 $$\left(\frac{579,96273 \ \text{ms}}{1000000 * 9}\right)^{−1} \approx 15,5 \ \text{Hz}$$
 
+## 2024-06-05
+- Writing code to retreive delay loop duration on target from pi pico
+
+## 2024-06-06
+- Writing code to calculate target UART TX -> pico UART RX delay
+- Done obtaining relevant delays, I guess
