@@ -7,6 +7,7 @@
 
 #define READ_TIMEOUT_CYCLES 5000 // At the standard 125MHz, this is 8ns*5000 = 40us (plus loop overhead)
 #define TARGET_REACHABLE_US	7000 // The target sends a `R` every 3ms, if after 7ms we haven't seen it, it's dead
+#define VOLT_TEST_TIMEOUT_US	6000 // 6ms timeout to receive all bytes in a voltage test (it normally takes ~5ms)
 
 typedef enum {
 	TARGET_IGNORE,		// Disarmed
@@ -29,6 +30,7 @@ void uart_echo(void);
 bool glitch_sync(void);
 int estimate_offset(void);
 bool uart_debug_pin_toggle(void);
+int voltage_test(void);
 
 static inline void uart_level_shifter_enable(void) {
 	*SET_GPIO_ATOMIC = 1 << PIN_UART_OE;

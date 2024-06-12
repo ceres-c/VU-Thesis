@@ -9,8 +9,6 @@
 #include "hardware/clocks.h"
 #include "hardware/i2c.h"
 
-#define GLITCH_LIVENESS_TIMEOUT	1000		// Max wait after glitch for target to send alive signal
-
 // Registers for SIO
 #define GPIO_ATOMIC				((volatile uint32_t*)(SIO_BASE + SIO_GPIO_OUT_OFFSET))
 #define SET_GPIO_ATOMIC			((volatile uint32_t*)(SIO_BASE + SIO_GPIO_OUT_SET_OFFSET))

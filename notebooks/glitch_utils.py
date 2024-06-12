@@ -22,6 +22,7 @@ P_CMD_PING					= b'\x70'	# Ping picocoder
 P_CMD_UART_ECHO				= b'\x75'	# Set picocoder in UART echo mode (need power cycle to exit)
 P_CMD_ESTIMATE_OFFSET		= b'\x76'	# Estimate glitch offset (see fw code to know what this does)
 P_CMD_UART_DEBUG_TOGGLE		= b'\x77'	# Toggle debug pin (GPIO 16) on UART RX
+P_CMD_VOLT_TEST				= b'\x78'	# Start voltage reliability test
 
 P_CMD_RESULT_RESET			= b'\x50'	# Target reset
 P_CMD_RESULT_ALIVE			= b'\x51'	# Target alive (data will follow)
@@ -47,6 +48,8 @@ RESULT_NAMES = {
 P_CMD_RETURN_OK				= b'\x61'	# Command successful
 P_CMD_RETURN_KO				= b'\x62'	# Command failed
 P_CMD_PONG					= b'\x63'	# Response to ping
+
+VOLT_TEST_MSG_COUNT			= 50		# Number of messages sent from the target during voltage test
 
 class GlitchResult(str, Enum): # str is needed to allow the enum to be a dict key (for the legend)
 	'''
@@ -109,7 +112,6 @@ class GlitchController:
 		for combination in combinations:
 			yield combination
 
-
 	def add_result(self, glitch_values: tuple[int, ...], result: GlitchResult):
 		self.results.append((glitch_values, result))
 
@@ -119,6 +121,7 @@ class GlitchyMcGlitchFace:
 	# Locally cached properties
 	_ext_offset: int = None # type: ignore
 	_width: int = None		# type: ignore
+	_voltage: int = None	# type: ignore
 	_connected: bool = False
 
 	@property
@@ -160,8 +163,64 @@ class GlitchyMcGlitchFace:
 		if self.s.read(1) != P_CMD_RETURN_OK:
 			raise ValueError('Could not set width')
 
+	@property
+	def target_voltage(self) -> int:
+		'''
+		Target glitch voltage (byte, as specified in TPS65094, Table 6-3)
+		'''
+		if self._voltage is None:
+			# TODO get from device
+			raise NotImplementedError
+		return self._voltage
+	@target_voltage.setter
+	def voltage(self, value: int):
+		if self._voltage == value:
+			return
+		self._voltage = value
+		self.s.reset_input_buffer()
+		self.s.write(struct.pack('<BB', struct.unpack('B', P_CMD_SET_VOLTAGE)[0], value))
+		if self.s.read(1) != P_CMD_RETURN_OK:
+			reason = self.s.read(100)
+			raise ValueError(f'Could not set voltage: {reason.decode('utf-8', errors='replace')}')
+
+	@property
+	def prep_voltage(self) -> int:
+		'''
+		Preparation voltage Vp - see Voltpillager paper
+		'''
+		raise NotImplementedError
+		# TODO
+	@prep_voltage.setter
+	def prep_voltage(self, value: int):
+		raise NotImplementedError
+		# TODO
+
+	@property
+	def prept_time(self) -> int:
+		'''
+		Preparation time Tp (duration of the preparation voltage) in us - see Voltpillager paper
+		'''
+		# TODO
+		raise NotImplementedError
+	@prept_time.setter
+	def prept_time(self, value: int):
+		# TODO
+		raise NotImplementedError
+
 	def __init__(self, port: str = '/dev/ttyACM0', baudrate: int = 115200, timeout: float = 1.0):
 		self.s = serial.Serial(port, baudrate, timeout=timeout)
+
+	def __del__(self):
+		if self.s is not None:
+			self.s.close()
+
+	def clear(self) -> None:
+		'''
+		Clear cached properties
+		'''
+		self._ext_offset = None	# type: ignore
+		self._width = None		# type: ignore
+		self._voltage = None	# type: ignore
 
 	def ping(self) -> bool:
 		'''
@@ -172,7 +231,7 @@ class GlitchyMcGlitchFace:
 			return True
 		return False
 
-	def glitch_mul(self, glitch_setting: Annotated[tuple[int], 2], expected: int) -> tuple[GlitchResult, int|bytes|None]:
+	def glitch_mul(self, glitch_setting: Annotated[tuple[int], 3], expected: int) -> tuple[GlitchResult, int|bytes|None]:
 		'''
 		Perform a glitch on `mul` with the given settings
 		'''
@@ -183,7 +242,7 @@ class GlitchyMcGlitchFace:
 				raise ConnectionError('Could not connect to picocoder')
 			self._connected = ping
 
-		[self.ext_offset, self.width] = [*glitch_setting]
+		[self.ext_offset, self.width, self.voltage] = [*glitch_setting]
 
 		self.s.reset_input_buffer() # Clear any pending data, just in case
 		self.s.write(P_CMD_ARM)

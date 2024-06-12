@@ -167,6 +167,8 @@ void process(pio_spi_inst_t *spi, int command) {
 		case P_CMD_UART_DEBUG_TOGGLE:
 			putu32(uart_debug_pin_toggle());
 			break;
+		case P_CMD_VOLT_TEST:
+			putu32(voltage_test());
 		default:
 			putchar(S_NAK);
 	}

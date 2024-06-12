@@ -279,3 +279,59 @@ bool __no_inline_not_in_flash_func(uart_debug_pin_toggle)(void) {
 	uart_level_shifter_disable();
 	return true;
 }
+
+int voltage_test(void) {
+	/*
+	 * Test target behavior at a given voltage when sending a fixed number (see target firmware)
+	 * of T_CMD_VOLT_TEST_PING characters. The number of actually received characters is returned.
+	 * The target voltage must be set before calling this function (P_CMD_SET_VOLTAGE).
+	 * This function will count all received characters within a fixed time frame.
+	 * 
+	 * Returns:
+	 *  - -1: target is unreachable
+	 *  - -2: could not send command to PMIC to set glitch target voltage
+	 *  - -3: could not send command to PMIC to restore standard voltage
+	 *  - >=0: the number of received T_CMD_VOLT_TEST_PING characters
+	 */
+
+	int count = 0;
+	int ret = 0;
+	uint32_t t;
+
+	volatile uint8_t data = uart_hw_read(); // Start off with a clean RX data register
+	uart_level_shifter_enable();
+	t = time_us_32();
+	do {
+		if (uart_hw_readable()) goto reachable;
+	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	ret = -1;
+	goto end;
+
+	reachable:
+	uart_hw_write(T_CMD_VOLT_TEST);
+
+	int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
+	if (write_glitch_res != TPS_WRITE_REG_CMD_LEN) {
+		ret = -2;
+		goto end;
+	}
+
+	t = time_us_32();
+	while (time_us_32() - t <= VOLT_TEST_TIMEOUT_US) {
+		if (uart_hw_readable()) {
+			if (uart_hw_read() == T_CMD_VOLT_TEST_PING)
+				count++;
+		}
+	}
+	ret = count;
+
+	// Restore standard voltage
+	int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
+	if (write_restore_res != TPS_WRITE_REG_CMD_LEN) {
+		ret = -3;
+	}
+
+	end:
+	uart_level_shifter_disable();
+	return ret;
+}

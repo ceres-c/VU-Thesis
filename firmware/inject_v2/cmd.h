@@ -52,6 +52,7 @@
 #define P_CMD_UART_ECHO				0x75	/* Echo UART data from target to USB			*/
 #define P_CMD_ESTIMATE_OFFSET		0x76	/* Estimate the offset to the glitch point (ballpark) */
 #define P_CMD_UART_DEBUG_TOGGLE		0x77	/* Toggle debug pin on UART data in				*/
+#define P_CMD_VOLT_TEST				0x78	/* Start voltage reliability test				*/
 
 // Commands to/from the target board
 #define T_CMD_RESET					'R'
@@ -59,6 +60,8 @@
 #define T_CMD_TRIGGER				'T'
 #define T_CMD_ALIVE					'A'
 #define T_CMD_EXTRA_WAIT			'E'		/* Add extra wait time between two resets in glitch loop (acts on next reset) */
+#define T_CMD_VOLT_TEST				'V'		/* Start voltage reliability test */
+#define T_CMD_VOLT_TEST_PING		'.'		/* Character that will be sent during voltage reliability test */
 #define T_CMD_BOGUS1				0xF0	/* Unknown to the target, will reset target		*/
 #define T_CMD_BOGUS2				0xF1	/* Same as above								*/
 #define T_CMD_BOGUS3				0xF2	/* Same as above								*/
