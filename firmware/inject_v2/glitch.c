@@ -44,6 +44,28 @@ void target_uart_init(void) {
 		uart_getc(UART_TARGET);
 }
 
+bool ping_target(void) {
+	uint32_t t;
+	bool ret = false;
+
+	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
+		uart_getc(UART_TARGET);
+
+	uart_level_shifter_enable();
+
+	// Connect to target
+	t = time_us_32();
+	do {
+		if (uart_hw_readable()) {
+			ret = true;
+			break;
+		}
+	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+
+	uart_level_shifter_disable();
+	return ret;
+}
+
 void uart_echo(void) {
 	puts("UART echo, power cycle to exit");
 	uart_level_shifter_enable();
@@ -75,7 +97,7 @@ bool glitch_sync(void) {
 
 	reachable:
 	data = uart_hw_read();
-	if (data != T_CMD_RESET) {
+	if (data != T_CMD_READY) {
 		putchar(P_CMD_RESULT_UNCONNECTABLE);
 		return false;
 	}
@@ -122,7 +144,7 @@ bool glitch_sync(void) {
 			putchar(P_CMD_RESULT_ALIVE);
 			putu32(c1 | (c2<<8) | (c3<<16) | (c4<<24));
 		}
-	} else if (data == T_CMD_RESET) {
+	} else if (data == T_CMD_READY) {
 		putchar(P_CMD_RESULT_RESET);
 	} else {
 		putchar(P_CMD_RESULT_ZOMBIE);
@@ -147,7 +169,7 @@ int estimate_offset(void) {
 	 * This function gives a rough estimate for the glitch offset parameter.
 	 * It takes into account:
 	 *  - The time length of the fixed loop in the target firmware that happens
-	 *    after the byte `T_CMD_RESET` is sent by the target.
+	 *    after the byte `T_CMD_READY` is sent by the target.
 	 *  - The reaction time of the pico to data on the UART channel (time between
 	 *    the data being on the channel and it being available to the Pico RX FIFO).
 	 *
@@ -280,56 +302,75 @@ bool __no_inline_not_in_flash_func(uart_debug_pin_toggle)(void) {
 	return true;
 }
 
+uint voltage_count = 0;
+bool voltage_done = false;
+void irq_voltage_test_counter(void) {
+	/* Registered as a UART IRQ, whenever a byte is received it increments voltage_count */
+	volatile uint8_t d = uart_get_hw(UART_TARGET)->dr; // Clear the interrupt
+	if (d == T_CMD_VOLT_TEST_PING) {
+		voltage_count++;
+	} else if (d == T_CMD_READY) {
+		voltage_done = true;
+	}
+}
+
 int voltage_test(void) {
 	/*
 	 * Test target behavior at a given voltage when sending a fixed number (see target firmware)
 	 * of T_CMD_VOLT_TEST_PING characters. The number of actually received characters is returned.
 	 * The target voltage must be set before calling this function (P_CMD_SET_VOLTAGE).
-	 * This function will count all received characters within a fixed time frame.
-	 * 
+	 * This function will count all received characters until either the target sends a reset
+	 * or the timeout is reached.
+	 *
+	 * The drop width and external offset are configured the same way as for the glitching routine.
+	 *
 	 * Returns:
 	 *  - -1: target is unreachable
-	 *  - -2: could not send command to PMIC to set glitch target voltage
-	 *  - -3: could not send command to PMIC to restore standard voltage
+	 *  - -2: could not send command to PMIC to set glitch target voltage/restore standard voltage
 	 *  - >=0: the number of received T_CMD_VOLT_TEST_PING characters
 	 */
 
-	int count = 0;
 	int ret = 0;
 	uint32_t t;
+	uint32_t extra_delay = 0;
+
+	if (glitch.width > VOLT_TEST_TIMEOUT_US) {
+		extra_delay = 0;
+	} else {
+		extra_delay = VOLT_TEST_TIMEOUT_US - glitch.width;
+	}
+
+	irq_set_exclusive_handler(UART0_IRQ, irq_voltage_test_counter);
 
 	volatile uint8_t data = uart_hw_read(); // Start off with a clean RX data register
 	uart_level_shifter_enable();
 	t = time_us_32();
 	do {
 		if (uart_hw_readable()) goto reachable;
-	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	} while ((time_us_32() - t) <= TARGET_REACHABLE_US || voltage_done);
 	ret = -1;
 	goto end;
 
 	reachable:
+	voltage_count = 0;
 	uart_hw_write(T_CMD_VOLT_TEST);
 
+	irq_set_enabled(UART0_IRQ, true);
+	uart_set_irq_enables(UART_TARGET, true, false);
+
+	busy_wait_us_32(glitch.ext_offset);
 	int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
-	if (write_glitch_res != TPS_WRITE_REG_CMD_LEN) {
-		ret = -2;
-		goto end;
-	}
-
-	t = time_us_32();
-	while (time_us_32() - t <= VOLT_TEST_TIMEOUT_US) {
-		if (uart_hw_readable()) {
-			if (uart_hw_read() == T_CMD_VOLT_TEST_PING)
-				count++;
-		}
-	}
-	ret = count;
-
-	// Restore standard voltage
+	busy_wait_us_32(glitch.width);
 	int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
-	if (write_restore_res != TPS_WRITE_REG_CMD_LEN) {
-		ret = -3;
+	busy_wait_us_32(extra_delay); // Wait for the target to send all the data back
+
+	uart_set_irq_enables(UART_TARGET, false, false);
+	irq_set_enabled(UART0_IRQ, false);
+
+	if (write_glitch_res != TPS_WRITE_REG_CMD_LEN || write_restore_res != TPS_WRITE_REG_CMD_LEN) {
+		return -2;
 	}
+	ret = voltage_count;
 
 	end:
 	uart_level_shifter_disable();

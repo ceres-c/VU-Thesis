@@ -161,6 +161,9 @@ void process(pio_spi_inst_t *spi, int command) {
 		case P_CMD_PING:
 			putchar(P_CMD_PONG);
 			break;
+		case P_CMD_TARGET_PING:
+			putchar(ping_target());
+			break;
 		case P_CMD_ESTIMATE_OFFSET:
 			putu32(estimate_offset());
 			break;

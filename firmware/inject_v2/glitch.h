@@ -26,6 +26,7 @@ typedef struct glitch_s {
 extern glitch_t glitch;
 
 void target_uart_init(void);
+bool ping_target(void);
 void uart_echo(void);
 bool glitch_sync(void);
 int estimate_offset(void);

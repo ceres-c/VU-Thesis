@@ -2,6 +2,7 @@ import random
 import struct
 from enum import Enum
 from itertools import product
+import time
 from typing import Annotated, Iterator
 
 import serial
@@ -19,6 +20,7 @@ P_CMD_SET_EXT_OFFST			= b'\x24'	# Set external offset (wait after trig.) in us
 P_CMD_SET_WIDTH				= b'\x25'	# Set glitch width	(duration of glitch) in us
 
 P_CMD_PING					= b'\x70'	# Ping picocoder
+P_CMD_TARGET_PING			= b'\x71'	# Ping from picocoder to target
 P_CMD_UART_ECHO				= b'\x75'	# Set picocoder in UART echo mode (need power cycle to exit)
 P_CMD_ESTIMATE_OFFSET		= b'\x76'	# Estimate glitch offset (see fw code to know what this does)
 P_CMD_UART_DEBUG_TOGGLE		= b'\x77'	# Toggle debug pin (GPIO 16) on UART RX
@@ -124,6 +126,13 @@ class GlitchyMcGlitchFace:
 	_voltage: int = None	# type: ignore
 	_connected: bool = False
 
+	def __init__(self, glitcher_port: str = '/dev/ttyACM0', baudrate: int = 115200, timeout: float = 1.0):
+		self.s = serial.Serial(glitcher_port, baudrate, timeout=timeout)
+
+	def __del__(self):
+		if self.s is not None:
+			self.s.close()
+
 	@property
 	def ext_offset(self) -> int:
 		'''
@@ -207,13 +216,6 @@ class GlitchyMcGlitchFace:
 		# TODO
 		raise NotImplementedError
 
-	def __init__(self, port: str = '/dev/ttyACM0', baudrate: int = 115200, timeout: float = 1.0):
-		self.s = serial.Serial(port, baudrate, timeout=timeout)
-
-	def __del__(self):
-		if self.s is not None:
-			self.s.close()
-
 	def clear(self) -> None:
 		'''
 		Clear cached properties
@@ -230,6 +232,30 @@ class GlitchyMcGlitchFace:
 		if self.s.read(1) == P_CMD_PONG:
 			return True
 		return False
+
+	def ping_target(self, timeout=1.5) -> bool:
+		'''
+		Ping target from picocoder
+
+		Parameters:
+			timeout: timeout in seconds (default = 1.5 - on average it takes 800ms for the target to boot)
+		'''
+		steps = int(timeout / 0.1) if timeout > 0.1 else 1
+		old_timeout = self.s.timeout
+		self.s.timeout = 0.01
+		ret: bool = False
+
+		self.s.reset_input_buffer()
+		for _ in range(steps):
+			self.s.write(P_CMD_TARGET_PING)
+			res = self.s.read(1)
+			if int.from_bytes(res, 'little'):
+				ret = True
+				break
+			time.sleep(0.1)
+
+		self.s.timeout = old_timeout
+		return ret
 
 	def glitch_mul(self, glitch_setting: Annotated[tuple[int], 3], expected: int) -> tuple[GlitchResult, int|bytes|None]:
 		'''
