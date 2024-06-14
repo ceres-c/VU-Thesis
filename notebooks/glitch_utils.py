@@ -150,8 +150,11 @@ class GlitchyMcGlitchFace:
 		self._ext_offset = value
 		self.s.reset_input_buffer()
 		self.s.write(struct.pack('<BI', struct.unpack('B', P_CMD_SET_EXT_OFFST)[0], value))
-		if self.s.read(1) != P_CMD_RETURN_OK:
-			raise ValueError('Could not set external offset')
+		ret = self.s.read(1)
+		if not ret:
+			raise ConnectionError('Could not set external offset: no response')
+		if ret != P_CMD_RETURN_OK:
+			raise ValueError(f'Could not set external offset. Received: 0x{ret.hex()}')
 
 	@property
 	def width(self) -> int:
@@ -169,8 +172,11 @@ class GlitchyMcGlitchFace:
 		self._width = value
 		self.s.reset_input_buffer()
 		self.s.write(struct.pack('<BI', struct.unpack('B', P_CMD_SET_WIDTH)[0], value))
-		if self.s.read(1) != P_CMD_RETURN_OK:
-			raise ValueError('Could not set width')
+		ret = self.s.read(1)
+		if not ret:
+			raise ConnectionError('Could not set width: no response')
+		if ret != P_CMD_RETURN_OK:
+			raise ValueError(f'Could not set width. Received: 0x{ret.hex()}')
 
 	@property
 	def target_voltage(self) -> int:
@@ -188,9 +194,12 @@ class GlitchyMcGlitchFace:
 		self._voltage = value
 		self.s.reset_input_buffer()
 		self.s.write(struct.pack('<BB', struct.unpack('B', P_CMD_SET_VOLTAGE)[0], value))
-		if self.s.read(1) != P_CMD_RETURN_OK:
-			reason = self.s.read(100)
-			raise ValueError(f'Could not set voltage: {reason.decode('utf-8', errors='replace')}')
+		ret = self.s.read(1)
+		if not ret:
+			raise ConnectionError('Could not set voltage: no response')
+		if ret != P_CMD_RETURN_OK:
+			reason = self.s.readline()
+			raise ValueError(f'Could not set voltage. Received: 0x{ret.hex()}: {reason.decode('utf-8', errors='replace')}')
 
 	@property
 	def prep_voltage(self) -> int:

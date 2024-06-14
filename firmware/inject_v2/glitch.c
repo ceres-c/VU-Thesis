@@ -302,15 +302,17 @@ bool __no_inline_not_in_flash_func(uart_debug_pin_toggle)(void) {
 	return true;
 }
 
-uint voltage_count = 0;
-bool voltage_done = false;
+uint volt_dot_count = 0;
+bool volt_dot_detected = false;
+bool volt_done_alive = false;
 void irq_voltage_test_counter(void) {
-	/* Registered as a UART IRQ, whenever a byte is received it increments voltage_count */
+	/* Registered as a UART IRQ, whenever a byte is received it increments volt_dot_count */
 	volatile uint8_t d = uart_get_hw(UART_TARGET)->dr; // Clear the interrupt
 	if (d == T_CMD_VOLT_TEST_PING) {
-		voltage_count++;
-	} else if (d == T_CMD_READY) {
-		voltage_done = true;
+		volt_dot_count++;
+		volt_dot_detected = true;
+	} else if (d == T_CMD_READY && volt_dot_detected) {
+		volt_done_alive = true;
 	}
 }
 
@@ -319,20 +321,23 @@ int voltage_test(void) {
 	 * Test target behavior at a given voltage when sending a fixed number (see target firmware)
 	 * of T_CMD_VOLT_TEST_PING characters. The number of actually received characters is returned.
 	 * The target voltage must be set before calling this function (P_CMD_SET_VOLTAGE).
-	 * This function will count all received characters until either the target sends a reset
-	 * or the timeout is reached.
+	 * This function will count incoming characters before the timeout is reached.
 	 *
 	 * The drop width and external offset are configured the same way as for the glitching routine.
 	 *
 	 * Returns:
 	 *  - -1: target is unreachable
-	 *  - -2: could not send command to PMIC to set glitch target voltage/restore standard voltage
+	 *  - -2: target died during the test
+	 *  - -3: could not send command to PMIC to set glitch target voltage/restore standard voltage
 	 *  - >=0: the number of received T_CMD_VOLT_TEST_PING characters
 	 */
 
 	int ret = 0;
 	uint32_t t;
 	uint32_t extra_delay = 0;
+	volt_dot_count = 0;
+	volt_dot_detected = false;
+	volt_done_alive = false;
 
 	if (glitch.width > VOLT_TEST_TIMEOUT_US) {
 		extra_delay = 0;
@@ -347,12 +352,11 @@ int voltage_test(void) {
 	t = time_us_32();
 	do {
 		if (uart_hw_readable()) goto reachable;
-	} while ((time_us_32() - t) <= TARGET_REACHABLE_US || voltage_done);
+	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
 	ret = -1;
 	goto end;
 
 	reachable:
-	voltage_count = 0;
 	uart_hw_write(T_CMD_VOLT_TEST);
 
 	irq_set_enabled(UART0_IRQ, true);
@@ -368,9 +372,12 @@ int voltage_test(void) {
 	irq_set_enabled(UART0_IRQ, false);
 
 	if (write_glitch_res != TPS_WRITE_REG_CMD_LEN || write_restore_res != TPS_WRITE_REG_CMD_LEN) {
-		return -2;
+		ret = -3;
+	} else if (!volt_done_alive) {
+		ret = -2;
+	} else {
+		ret = volt_dot_count;
 	}
-	ret = voltage_count;
 
 	end:
 	uart_level_shifter_disable();

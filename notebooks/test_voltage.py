@@ -18,9 +18,15 @@ ps.con()
 glitcher = glitch_utils.GlitchyMcGlitchFace(GLITCHER_PORT, GLITCHER_BAUD)
 gc = glitch_utils.GlitchController(groups=[r.name for r in GlitchResult], parameters=['ext_offset', 'width', 'voltage'])
 
+if not glitcher.ping():
+	print('Glitcher is not responding')
+	exit(-1)
+
 glitcher.ext_offset = 500
-glitcher.width = 5
-glitcher.voltage = 0b0110011 # 1V
+glitcher.width = 100
+# glitcher.voltage = 0b0110011 # 1V
+# glitcher.voltage = 0b0111011
+glitcher.voltage = 0b0111101
 glitcher.s.reset_input_buffer() # Clear any pending data, just in case
 glitcher.s.write(glitch_utils.P_CMD_VOLT_TEST)
 
