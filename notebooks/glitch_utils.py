@@ -57,26 +57,12 @@ class GlitchResult(str, Enum): # str is needed to allow the enum to be a dict ke
 	'''
 	Glitch result (processed from raw picocoder return codes)
 	'''
-	RESET					= 0
-	NORMAL					= 1
-	WEIRD					= 2
-	SUCCESS					= 3
-	BROKEN					= 4
-	DEAD					= 5
-
-def result_to_marker(result: GlitchResult) -> str:
-	'''
-	Convert a GlitchResult to a matplotlib-compatible scatter plot marker
-	'''
-	dic = {
-		GlitchResult.RESET		: 'xr',
-		GlitchResult.NORMAL		: '1b',
-		GlitchResult.WEIRD		: '<y',
-		GlitchResult.SUCCESS	: 'og',
-		GlitchResult.BROKEN		: 'Dm',
-		GlitchResult.DEAD		: 'sk',
-	}
-	return dic[result]
+	RESET					= 'xr'	# Red		Cross
+	NORMAL					= '1b'	# Blue		Y (rotated cross)
+	WEIRD					= '<y'	# Yellow	Triangle pointing left (solid)
+	SUCCESS					= 'og'	# Green		Circle (solid)
+	BROKEN					= 'Dm'	# Magenta	Diamond (solid)
+	DEAD					= 'sk'	# Black		Square (solid)
 
 class GlitchController:
 	def __init__(self, groups: list[str], parameters: list[str]):
@@ -265,6 +251,43 @@ class GlitchyMcGlitchFace:
 
 		self.s.timeout = old_timeout
 		return ret
+
+	def find_crash_voltage(self, glitch_setting: Annotated[tuple[int], 2], expected: int) -> tuple[GlitchResult, int|bytes|None]:
+		'''
+		Estimates a stable voltage for the target
+
+		Args:
+			glitch_setting: Glitch settings to use. Tuple of (width, voltage)
+			expected: Number of expected bytes sent by the target
+		'''
+		if not self._connected:
+			ping = self.ping()
+			if not ping:
+				raise ConnectionError('Could not connect to picocoder')
+			self._connected = ping
+
+		[self.width, self.voltage] = [*glitch_setting]
+
+		self.s.reset_input_buffer() # Clear any pending data, just in case
+		self.s.write(P_CMD_VOLT_TEST)
+
+		data = self.s.read(4)
+		if not data:
+			raise ConnectionError('Did not get any data from picocoder after P_CMD_VOLT_TEST')
+
+		result = struct.unpack("<i", data)[0]
+		if result == expected:
+			return GlitchResult.NORMAL, None
+		elif result < expected and result > 0:
+			return GlitchResult.WEIRD, result
+		elif result == -1: # Unreachable
+			return GlitchResult.DEAD, None
+		elif result == -2: # No "ready"
+			return GlitchResult.RESET, None
+		elif result == -3: # Can't write PMIC
+			return GlitchResult.BROKEN, None
+		else:
+			return GlitchResult.BROKEN, result
 
 	def glitch_mul(self, glitch_setting: Annotated[tuple[int], 3], expected: int) -> tuple[GlitchResult, int|bytes|None]:
 		'''
