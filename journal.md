@@ -143,3 +143,16 @@ $$\left(\frac{579,96273 \ \text{ms}}{1000000 * 9}\right)^{−1} \approx 15,5 \ \
 ## 2024-06-06
 - Writing code to calculate target UART TX -> pico UART RX delay
 - Done obtaining relevant delays, I guess
+
+## 2024-06-13
+- Writing code to identify stable threshold voltages
+- Switched power supply to lab psu for easy target reset
+
+## 2024-06-14
+- Reliable code
+- Found some weird behavior with target dying after a while (see images in
+notebooks/img)
+- Above looks similar to when I power the target on and it is simply not
+brought up entirely, that is without any fault injection going on. It just
+boots, does its thing for a couple of ms, then hangs. Probs it does not like
+the ME being only half loaded or something.
