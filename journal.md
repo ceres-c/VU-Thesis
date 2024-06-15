@@ -156,3 +156,8 @@ notebooks/img)
 brought up entirely, that is without any fault injection going on. It just
 boots, does its thing for a couple of ms, then hangs. Probs it does not like
 the ME being only half loaded or something.
+
+## 2024-06-15
+- Moved glitch success detection to target side, as it is faster (and easier to
+find the right moment to glitch)
+- Added Vp preparation voltage config

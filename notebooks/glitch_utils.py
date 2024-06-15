@@ -18,6 +18,8 @@ P_CMD_FORCE					= b'\x22'	# Force write to PMBus to perform a glitch
 P_CMD_SET_VOLTAGE			= b'\x23'	# Set glitch voltage
 P_CMD_SET_EXT_OFFST			= b'\x24'	# Set external offset (wait after trig.) in us
 P_CMD_SET_WIDTH				= b'\x25'	# Set glitch width	(duration of glitch) in us
+P_CMD_SET_PREP_VOLTAGE		= b'\x26'	# Set Vp (preparation voltage) before glitch
+P_CMD_SET_PREP_TIME			= b'\x27'	# Set Tp (preparation width) before glitch
 
 P_CMD_PING					= b'\x70'	# Ping picocoder
 P_CMD_TARGET_PING			= b'\x71'	# Ping from picocoder to target
@@ -112,6 +114,7 @@ class GlitchyMcGlitchFace:
 	_ext_offset: int = None # type: ignore
 	_width: int = None		# type: ignore
 	_voltage: int = None	# type: ignore
+	_prep_voltage: int = None # type: ignore
 	_connected: bool = False
 
 	def __init__(self, glitcher_port: str = '/dev/ttyACM0', baudrate: int = 115200, timeout: float = 1.0):
@@ -198,20 +201,16 @@ class GlitchyMcGlitchFace:
 		# TODO
 	@prep_voltage.setter
 	def prep_voltage(self, value: int):
-		raise NotImplementedError
-		# TODO
-
-	@property
-	def prep_width(self) -> int:
-		'''
-		Preparation time Tp (duration of the preparation voltage) in us - see Voltpillager paper
-		'''
-		# TODO
-		raise NotImplementedError
-	@prep_width.setter
-	def prep_time(self, value: int):
-		# TODO
-		raise NotImplementedError
+		if self._prep_voltage == value:
+			return
+		self._prep_voltage = value
+		self.s.reset_input_buffer()
+		self.s.write(struct.pack('<BB', struct.unpack('B', P_CMD_SET_PREP_VOLTAGE)[0], value))
+		ret = self.s.read(1)
+		if not ret:
+			raise ConnectionError('Could not set preparation voltage: no response')
+		if ret != P_CMD_RETURN_OK:
+			raise ValueError(f'Could not set preparation voltage. Received: 0x{ret.hex()}')
 
 	def clear(self) -> None:
 		'''
