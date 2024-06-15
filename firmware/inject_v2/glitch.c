@@ -147,14 +147,21 @@ bool glitch_sync(void) {
 	alive:
 	data = uart_hw_read();
 	switch (data) {
-	case T_CMD_ALIVE:
-		readu32_t r;
-		uart_hw_readu32(&r);
-		if (!r.valid) {
+	case T_CMD_NORMAL:
+		putchar(P_CMD_RESULT_NORMAL);
+		break;
+	case T_CMD_SUCCESS:
+		readu32_t performed, result_a, result_b;
+		uart_hw_readu32(&performed);
+		uart_hw_readu32(&result_a);
+		uart_hw_readu32(&result_b);
+		if (!performed.valid || !result_a.valid || !result_b.valid) {
 			putchar(P_CMD_RESULT_DATA_TIMEOUT);
 		} else {
-			putchar(P_CMD_RESULT_ALIVE);
-			putu32(r.val);
+			putchar(P_CMD_RESULT_SUCCESS);
+			putu32(performed.val);
+			putu32(result_a.val);
+			putu32(result_b.val);
 		}
 		break;
 	case T_CMD_READY:

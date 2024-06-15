@@ -27,17 +27,19 @@ P_CMD_UART_DEBUG_TOGGLE		= b'\x77'	# Toggle debug pin (GPIO 16) on UART RX
 P_CMD_VOLT_TEST				= b'\x78'	# Start voltage reliability test
 
 P_CMD_RESULT_RESET			= b'\x50'	# Target reset
-P_CMD_RESULT_ALIVE			= b'\x51'	# Target alive (data will follow)
-P_CMD_RESULT_DEAD			= b'\x52'	# Target dead
-P_CMD_RESULT_ZOMBIE			= b'\x53'	# Target is nor alive nor it reset after glitch
-P_CMD_RESULT_DATA_TIMEOUT	= b'\x54'	# Target timeout after glitch when sending data back (target is alive)
-P_CMD_RESULT_UNREACHABLE	= b'\x55'	# Target unavailable when starting glitch: did not receive anything on the serial port
-P_CMD_RESULT_UNCONNECTABLE	= b'\x56'	# Target unavailable when starting glitch: did not receive the expected connection command
-P_CMD_RESULT_UNTRIGGERED	= b'\x57'	# No trigger received after connection was established
-P_CMD_RESULT_PMIC_FAIL		= b'\x58'	# Could not send command to PMIC
+P_CMD_RESULT_NORMAL			= b'\x51'	# No glitch achieved
+P_CMD_RESULT_SUCCESS		= b'\x52'	# Glitched successfully
+P_CMD_RESULT_DEAD			= b'\x53'	# Target dead
+P_CMD_RESULT_ZOMBIE			= b'\x54'	# Target is nor alive nor it reset after glitch
+P_CMD_RESULT_DATA_TIMEOUT	= b'\x55'	# Target timeout after glitch when sending data back (target is alive)
+P_CMD_RESULT_UNREACHABLE	= b'\x56'	# Target unavailable when starting glitch: did not receive anything on the serial port
+P_CMD_RESULT_UNCONNECTABLE	= b'\x57'	# Target unavailable when starting glitch: did not receive the expected connection command
+P_CMD_RESULT_UNTRIGGERED	= b'\x58'	# No trigger received after connection was established
+P_CMD_RESULT_PMIC_FAIL		= b'\x59'	# Could not send command to PMIC
 RESULT_NAMES = {
 	P_CMD_RESULT_RESET			: 'RESET',
-	P_CMD_RESULT_ALIVE			: 'ALIVE',
+	P_CMD_RESULT_NORMAL			: 'NORMAL',
+	P_CMD_RESULT_SUCCESS		: 'SUCCESS',
 	P_CMD_RESULT_DEAD			: 'DEAD',
 	P_CMD_RESULT_ZOMBIE			: 'ZOMBIE',
 	P_CMD_RESULT_DATA_TIMEOUT	: 'DATA TIMEOUT',
@@ -200,14 +202,14 @@ class GlitchyMcGlitchFace:
 		# TODO
 
 	@property
-	def prept_time(self) -> int:
+	def prep_width(self) -> int:
 		'''
 		Preparation time Tp (duration of the preparation voltage) in us - see Voltpillager paper
 		'''
 		# TODO
 		raise NotImplementedError
-	@prept_time.setter
-	def prept_time(self, value: int):
+	@prep_width.setter
+	def prep_time(self, value: int):
 		# TODO
 		raise NotImplementedError
 
@@ -289,9 +291,14 @@ class GlitchyMcGlitchFace:
 		else:
 			return GlitchResult.BROKEN, result
 
-	def glitch_mul(self, glitch_setting: Annotated[tuple[int], 3], expected: int) -> tuple[GlitchResult, int|bytes|None]:
+	def glitch_mul(self, glitch_setting: Annotated[tuple[int], 3]) -> tuple[GlitchResult, tuple|bytes|None]:
 		'''
-		Perform a glitch on `mul` with the given settings
+		Perform a glitch on `mul` with the given settings.
+		When a successful glitch is performed, the function returns a tuple with:
+			- the number of performed iterations
+			- result_a
+			- result_b
+		where result_a and result_b are the two multiplication values
 		'''
 
 		if not self._connected:
@@ -311,20 +318,28 @@ class GlitchyMcGlitchFace:
 
 		if data == P_CMD_RESULT_RESET:
 			return GlitchResult.RESET, None
-		if data == P_CMD_RESULT_ALIVE:
-			ret_data = self.s.read(4)
-			if not ret_data:
-				raise ConnectionError('Did not receive data from picocoder after P_CMD_RESULT_ALIVE')
-			ret_val = struct.unpack("<I", ret_data)[0]
-			if ret_val == expected:
-				return GlitchResult.NORMAL, None
-			else:
-				return GlitchResult.SUCCESS, ret_val
-		if data == P_CMD_RESULT_DEAD:
+		elif data == P_CMD_RESULT_NORMAL:
+			return GlitchResult.NORMAL, None
+		elif data == P_CMD_RESULT_SUCCESS:
+			performed = self.s.read(4)
+			if not performed:
+				raise ConnectionError('Did not performed iterations count from picocoder after P_CMD_RESULT_SUCCESS')
+			performed = struct.unpack("<I", performed)[0]
+			result_a = self.s.read(4)
+			if not result_a:
+				raise ConnectionError('Did not receive result_a from picocoder after P_CMD_RESULT_SUCCESS')
+			result_a = struct.unpack("<I", result_a)[0]
+			result_b = self.s.read(4)
+			if not result_b:
+				raise ConnectionError('Did not receive result_b from picocoder after P_CMD_RESULT_SUCCESS')
+			result_b = struct.unpack("<I", result_b)[0]
+			return GlitchResult.SUCCESS, (performed, result_a, result_b)
+		elif data == P_CMD_RESULT_DEAD:
 			# TODO reset target?
 			return GlitchResult.DEAD, data
-		if data in [P_CMD_RESULT_DEAD, P_CMD_RESULT_ZOMBIE, P_CMD_RESULT_DATA_TIMEOUT, P_CMD_RESULT_UNREACHABLE,
+		elif data in [P_CMD_RESULT_DEAD, P_CMD_RESULT_ZOMBIE, P_CMD_RESULT_DATA_TIMEOUT, P_CMD_RESULT_UNREACHABLE,
 			  P_CMD_RESULT_UNCONNECTABLE, P_CMD_RESULT_UNTRIGGERED, P_CMD_RESULT_PMIC_FAIL]:
 			# TODO reset target?
 			return GlitchResult.BROKEN, data
-		return GlitchResult.WEIRD, data
+		else:
+			return GlitchResult.WEIRD, data
