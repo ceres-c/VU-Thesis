@@ -19,7 +19,9 @@ extern target_state_t target_state;
 
 typedef struct glitch_s {
 	uint32_t ext_offset;
+	uint32_t prep_time;
 	uint32_t width;
+	uint8_t cmd_prep[TPS_WRITE_REG_CMD_LEN];
 	uint8_t cmd_glitch[TPS_WRITE_REG_CMD_LEN];
 	uint8_t cmd_restore[TPS_WRITE_REG_CMD_LEN];
 } glitch_t;

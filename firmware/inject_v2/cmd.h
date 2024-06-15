@@ -30,6 +30,8 @@
 #define P_CMD_SET_VOLTAGE			0x23	/* Set glitch voltage							*/
 #define P_CMD_SET_EXT_OFFST			0x24	/* Set external offset (wait after trig.) in us	*/
 #define P_CMD_SET_WIDTH				0x25	/* Set glitch width	(duration of glitch) in us	*/
+#define P_CMD_SET_PREP_VOLTAGE		0x26	/* Set Vp (preparation voltage) before glitch	*/
+#define P_CMD_SET_PREP_TIME			0x27	/* Set Tp (preparation width) before glitch		*/
 
 // picocode glitch results
 #define P_CMD_RESULT_RESET			0x50	/* Target reset									*/

@@ -137,14 +137,13 @@ void process(pio_spi_inst_t *spi, int command) {
 			putchar(P_CMD_RETURN_OK);
 			break;
 		case P_CMD_SET_VOLTAGE:
-			uint8_t new_value = 0;
-			fread(&new_value, sizeof(uint8_t), 1, stdin);
-			if (new_value > TPS_VCORE_MAX) {
+			uint8_t new_voltage = getchar();
+			if (new_voltage > TPS_VCORE_MAX) {
 				putchar(P_CMD_RETURN_KO);
 				puts("[!] Value risks frying the CPU. Ignoring");
 				break;
 			}
-			glitch.cmd_glitch[1] = new_value;
+			glitch.cmd_glitch[1] = new_voltage;
 			putchar(P_CMD_RETURN_OK);
 			break;
 		case P_CMD_SET_EXT_OFFST:
@@ -153,6 +152,20 @@ void process(pio_spi_inst_t *spi, int command) {
 			break;
 		case P_CMD_SET_WIDTH:
 			glitch.width = getu32();
+			putchar(P_CMD_RETURN_OK);
+			break;
+		case P_CMD_SET_PREP_VOLTAGE:
+			uint8_t new_prep_voltage = getchar();
+			if (new_prep_voltage > TPS_VCORE_MAX) {
+				putchar(P_CMD_RETURN_KO);
+				puts("[!] Value risks frying the CPU. Ignoring");
+				break;
+			}
+			glitch.cmd_prep[1] = new_prep_voltage;
+			putchar(P_CMD_RETURN_OK);
+			break;
+		case P_CMD_SET_PREP_TIME:
+			glitch.prep_time = getu32();
 			putchar(P_CMD_RETURN_OK);
 			break;
 		case P_CMD_UART_ECHO:
