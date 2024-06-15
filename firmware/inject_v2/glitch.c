@@ -31,6 +31,19 @@ inline static volatile uint16_t uart_hw_read_timeout_cycles(uint32_t timeout_cyc
 	}
 	return UART_HW_NO_INPUT;
 }
+static void uart_hw_readu32(readu32_t *r) {
+	r->valid = false;
+	uint16_t c1 = uart_hw_read_timeout_cycles(READ_TIMEOUT_CYCLES);
+	uint16_t c2 = uart_hw_read_timeout_cycles(READ_TIMEOUT_CYCLES);
+	uint16_t c3 = uart_hw_read_timeout_cycles(READ_TIMEOUT_CYCLES);
+	uint16_t c4 = uart_hw_read_timeout_cycles(READ_TIMEOUT_CYCLES);
+	if (c1 == UART_HW_NO_INPUT || c2 == UART_HW_NO_INPUT || c3 == UART_HW_NO_INPUT || c4 == UART_HW_NO_INPUT) {
+		return;
+	}
+	r->valid = true;
+	r->val = ((c4 & 0xFF) << 24) | ((c3 & 0xFF) << 16) | ((c2 & 0xFF) << 8) | (c1 & 0xFF);
+	return;
+}
 
 void target_uart_init(void) {
 	uart_init(UART_TARGET, UART_TARGET_BAUD);
@@ -133,21 +146,23 @@ bool glitch_sync(void) {
 
 	alive:
 	data = uart_hw_read();
-	if (data == T_CMD_ALIVE) {
-		uint16_t c1 = uart_hw_read_timeout_cycles(READ_TIMEOUT_CYCLES);
-		uint16_t c2 = uart_hw_read_timeout_cycles(READ_TIMEOUT_CYCLES);
-		uint16_t c3 = uart_hw_read_timeout_cycles(READ_TIMEOUT_CYCLES);
-		uint16_t c4 = uart_hw_read_timeout_cycles(READ_TIMEOUT_CYCLES);
-		if (c1 == UART_HW_NO_INPUT || c2 == UART_HW_NO_INPUT || c3 == UART_HW_NO_INPUT || c4 == UART_HW_NO_INPUT)
+	switch (data) {
+	case T_CMD_ALIVE:
+		readu32_t r;
+		uart_hw_readu32(&r);
+		if (!r.valid) {
 			putchar(P_CMD_RESULT_DATA_TIMEOUT);
-		else {
+		} else {
 			putchar(P_CMD_RESULT_ALIVE);
-			putu32(c1 | (c2<<8) | (c3<<16) | (c4<<24));
+			putu32(r.val);
 		}
-	} else if (data == T_CMD_READY) {
+		break;
+	case T_CMD_READY:
 		putchar(P_CMD_RESULT_RESET);
-	} else {
+		break;
+	default:
 		putchar(P_CMD_RESULT_ZOMBIE);
+		break;
 	}
 	return true;
 }

@@ -25,6 +25,11 @@ typedef struct glitch_s {
 } glitch_t;
 extern glitch_t glitch;
 
+typedef struct readu32_s {
+	bool valid;
+	uint32_t val;
+} readu32_t;
+
 void target_uart_init(void);
 bool ping_target(void);
 void uart_echo(void);
@@ -44,6 +49,5 @@ static inline bool glitcher_arm(void) {
 	uart_level_shifter_enable();
 	return glitch_sync();
 }
-
 
 #endif // _GLITCH_H
