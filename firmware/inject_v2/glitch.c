@@ -1,7 +1,7 @@
 #include "glitch.h"
 
 target_state_t target_state = TARGET_IGNORE;
-glitch_t glitch = {0, 0, 0, {TPS_REG_BUCK2CTRL, TPS_VCORE_SAFE}, {TPS_REG_BUCK2CTRL, TPS_VCORE_MIN}, {TPS_REG_BUCK2CTRL, TPS_VCORE_SAFE}};
+glitch_t glitch = {0, 0, {TPS_REG_BUCK2CTRL, TPS_VCORE_SAFE}, {TPS_REG_BUCK2CTRL, TPS_VCORE_MIN}, {TPS_REG_BUCK2CTRL, TPS_VCORE_SAFE}};
 uint8_t retval[4] = {0, 0, 0, 0};
 uint8_t ret_i = 0;
 
@@ -126,14 +126,13 @@ bool glitch_sync(void) {
 
 	triggered:
 	data = uart_hw_read(); // Clear the RX FIFO
-	busy_wait_us_32(glitch.ext_offset);
 	int write_prep_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_prep, TPS_WRITE_REG_CMD_LEN, false, 100);
-	busy_wait_us_32(glitch.prep_time);
+	busy_wait_us_32(glitch.ext_offset);
 	int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
 	busy_wait_us_32(glitch.width);
 	int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
 
-	if (write_glitch_res != TPS_WRITE_REG_CMD_LEN || write_restore_res != TPS_WRITE_REG_CMD_LEN) {
+	if (write_prep_res != TPS_WRITE_REG_CMD_LEN | write_glitch_res != TPS_WRITE_REG_CMD_LEN || write_restore_res != TPS_WRITE_REG_CMD_LEN) {
 		putchar(P_CMD_RESULT_PMIC_FAIL);
 		return false;
 	}

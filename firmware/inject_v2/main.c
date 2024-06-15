@@ -164,10 +164,6 @@ void process(pio_spi_inst_t *spi, int command) {
 			glitch.cmd_prep[1] = new_prep_voltage;
 			putchar(P_CMD_RETURN_OK);
 			break;
-		case P_CMD_SET_PREP_TIME:
-			glitch.prep_time = getu32();
-			putchar(P_CMD_RETURN_OK);
-			break;
 		case P_CMD_UART_ECHO:
 			uart_echo();
 			break;
