@@ -57,6 +57,7 @@
 #define P_CMD_ESTIMATE_OFFSET		0x76	/* Estimate the offset to the glitch point (ballpark) */
 #define P_CMD_UART_DEBUG_TOGGLE		0x77	/* Toggle debug pin on UART data in				*/
 #define P_CMD_VOLT_TEST				0x78	/* Start voltage reliability test				*/
+#define P_CMD_DEBUG_PULSE			0x79	/* Single 10 us pulse on debug pin				*/
 
 // Commands to/from the target board
 #define T_CMD_READY					'R'

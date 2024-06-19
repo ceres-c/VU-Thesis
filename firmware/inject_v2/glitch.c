@@ -55,6 +55,20 @@ void target_uart_init(void) {
 	target_state = TARGET_IGNORE;
 	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
 		uart_getc(UART_TARGET);
+
+	uart_level_shifter_enable();
+}
+
+uint ping_target_count = 0;
+void irq_ping_target_reboot_counter(void) {
+	/* Registered as a UART IRQ, whenever an `R` is received it increments ping_target_count */
+	volatile uint8_t d = uart_get_hw(UART_TARGET)->dr; // Clear the interrupt
+	if (d == T_CMD_READY) {
+		ping_target_count++;
+	}
+}
+bool ping_target_reboot(void) {
+
 }
 
 bool ping_target(void) {
@@ -63,8 +77,6 @@ bool ping_target(void) {
 
 	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
 		uart_getc(UART_TARGET);
-
-	uart_level_shifter_enable();
 
 	// Connect to target
 	t = time_us_32();
@@ -75,13 +87,11 @@ bool ping_target(void) {
 		}
 	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
 
-	uart_level_shifter_disable();
 	return ret;
 }
 
 void uart_echo(void) {
 	puts("UART echo, power cycle to exit");
-	uart_level_shifter_enable();
 	while (true) {
 		int c = getchar_timeout_us(0);
 		if (c != PICO_ERROR_TIMEOUT) {
@@ -212,10 +222,9 @@ int estimate_offset(void) {
 	uint32_t measurements[ESTIMATE_ROUNDS];
 	uint32_t standard_median = 0, extra_delay_median = 0, loop_duration = 0;
 
-	uart_level_shifter_enable();
-
-	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
-		uart_getc(UART_TARGET);
+	while(uart_hw_readable()) { // Drain buffer
+		data = uart_hw_read();
+	}
 
 	// Calculate median time between two resets in standard conditions
 	for (int i = 0; i < ESTIMATE_ROUNDS; i++) {
@@ -248,8 +257,9 @@ int estimate_offset(void) {
 
 	// Now we will measure the time between two resets when the target adds a fixed delay
 	// (same as the one used in the glitching routine) between two resets.
-	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
-		uart_getc(UART_TARGET);
+	while(uart_hw_readable()) { // Drain buffer
+		data = uart_hw_read();
+	}
 
 	// Wait for connection init from target, we need to instruct the target to skip the loop
 	t = time_us_32();
@@ -292,11 +302,9 @@ int estimate_offset(void) {
 	extra_delay_median = measurements[ESTIMATE_ROUNDS / 2];
 
 	if (standard_median >= extra_delay_median) {
-		uart_level_shifter_disable();
 		return -2;
 	}
 
-	uart_level_shifter_disable();
 	loop_duration = extra_delay_median - standard_median;
 
 	if (loop_duration < PICO_RX_TIME)
@@ -311,17 +319,14 @@ bool __no_inline_not_in_flash_func(uart_debug_pin_toggle)(void) {
 	 * being on the UART channel, and it being available to the Pico.
 	 */
 	volatile uint8_t data = uart_hw_read(); // Start off with a clean RX data register
-	uart_level_shifter_enable();
 	uint32_t t = time_us_32();
 	do {
 		if (uart_hw_readable()) goto toggle;
 	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
-	uart_level_shifter_disable();
 	return false;
 
 	toggle:
 	gpio_xor_mask(PIN_DEBUG_MASK);
-	uart_level_shifter_disable();
 	return true;
 }
 
@@ -371,7 +376,6 @@ int voltage_test(void) {
 	irq_set_exclusive_handler(UART0_IRQ, irq_voltage_test_counter);
 
 	volatile uint8_t data = uart_hw_read(); // Start off with a clean RX data register
-	uart_level_shifter_enable();
 	t = time_us_32();
 	do {
 		if (uart_hw_readable()) goto reachable;
@@ -403,6 +407,5 @@ int voltage_test(void) {
 	}
 
 	end:
-	uart_level_shifter_disable();
 	return ret;
 }

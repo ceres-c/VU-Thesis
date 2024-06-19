@@ -56,7 +56,7 @@ class KA3305P(PowerSupply):
 	https://static.eleshop.nl/mage/media/wysiwyg/downloads/korad/ka3305_user_manual(1).pdf
 	'''
 
-	def __init__(self, port: str = '/dev/ttyACM0', baudrate: int = 9600, timeout: float = 1.0, cycle_wait: float = 0.0):
+	def __init__(self, port: str = '/dev/ttyACM0', baudrate: int = 9600, timeout: float = 1.0, cycle_wait: float = 0.3):
 		'''
 		Parameters:
 			port: serial port to connect to
@@ -68,6 +68,8 @@ class KA3305P(PowerSupply):
 		self.port = port
 		self.baudrate = baudrate
 		self.timeout = timeout
+		self.cycle_wait = cycle_wait
+		self.s: serial.Serial = None # type: ignore
 
 	def con(self):
 		self.s = serial.Serial(self.port, self.baudrate, timeout=self.timeout)
@@ -77,13 +79,18 @@ class KA3305P(PowerSupply):
 			raise OSError('Not a KORAD power supply')
 
 	def dis(self):
-		self.s.close()
+		if self.s:
+			self.s.close()
 
 	@property
 	def on(self) -> bool:
+		if not self.s:
+			raise OSError('Not connected')
 		self.s.write(b'STATUS?\r\n')
 		status = self.s.read(1)
 		return bool(status[0] & 0b1000000)
 	@on.setter
 	def on(self, value: bool):
+		if not self.s:
+			raise OSError('Not connected')
 		self.s.write(b'OUT%d\r\n' % (1 if value else 0))

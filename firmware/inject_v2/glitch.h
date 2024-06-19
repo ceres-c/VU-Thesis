@@ -47,7 +47,6 @@ static inline void uart_level_shifter_disable(void) {
 }
 static inline bool glitcher_arm(void) {
 	target_state = TARGET_UNKNOWN;
-	uart_level_shifter_enable();
 	return glitch_sync();
 }
 

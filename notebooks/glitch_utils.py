@@ -27,6 +27,7 @@ P_CMD_UART_ECHO				= b'\x75'	# Set picocoder in UART echo mode (need power cycle
 P_CMD_ESTIMATE_OFFSET		= b'\x76'	# Estimate glitch offset (see fw code to know what this does)
 P_CMD_UART_DEBUG_TOGGLE		= b'\x77'	# Toggle debug pin (GPIO 16) on UART RX
 P_CMD_VOLT_TEST				= b'\x78'	# Start voltage reliability test
+P_CMD_DEBUG_PULSE			= b'\x79'	# Single 10 us pulse on debug pin
 
 P_CMD_RESULT_RESET			= b'\x50'	# Target reset
 P_CMD_RESULT_NORMAL			= b'\x51'	# No glitch achieved
@@ -224,6 +225,7 @@ class GlitchyMcGlitchFace:
 		'''
 		Ping picocoder
 		'''
+		self.s.reset_input_buffer()
 		self.s.write(P_CMD_PING)
 		if self.s.read(1) == P_CMD_PONG:
 			return True
@@ -241,8 +243,8 @@ class GlitchyMcGlitchFace:
 		self.s.timeout = 0.01
 		ret: bool = False
 
-		self.s.reset_input_buffer()
 		for _ in range(steps):
+			self.s.reset_input_buffer()
 			self.s.write(P_CMD_TARGET_PING)
 			res = self.s.read(1)
 			if int.from_bytes(res, 'little'):
@@ -342,3 +344,56 @@ class GlitchyMcGlitchFace:
 			return GlitchResult.BROKEN, data
 		else:
 			return GlitchResult.WEIRD, data
+
+	def mul_test_vp(self, glitch_setting: Annotated[tuple[int], 2]) -> tuple[GlitchResult, tuple|bytes|None]:
+			'''
+			Perform a glitch on `mul` with the given settings.
+			When a successful glitch is performed, the function returns a tuple with:
+				- the number of performed iterations
+				- result_a
+				- result_b
+			where result_a and result_b are the two multiplication values
+			'''
+
+			if not self._connected:
+				ping = self.ping()
+				if not ping:
+					raise ConnectionError('Could not connect to picocoder')
+				self._connected = ping
+
+			[self.ext_offset, self.prep_voltage] = [*glitch_setting]
+
+			self.s.reset_input_buffer() # Clear any pending data, just in case
+			self.s.write(P_CMD_ARM)
+
+			data = self.s.read(1)
+			if not data:
+				raise ConnectionError('Could not connect to picocoder')
+
+			if data == P_CMD_RESULT_RESET:
+				return GlitchResult.RESET, None
+			elif data == P_CMD_RESULT_NORMAL:
+				return GlitchResult.NORMAL, None
+			elif data == P_CMD_RESULT_SUCCESS:
+				performed = self.s.read(4)
+				if not performed:
+					raise ConnectionError('Did not performed iterations count from picocoder after P_CMD_RESULT_SUCCESS')
+				performed = struct.unpack("<I", performed)[0]
+				result_a = self.s.read(4)
+				if not result_a:
+					raise ConnectionError('Did not receive result_a from picocoder after P_CMD_RESULT_SUCCESS')
+				result_a = struct.unpack("<I", result_a)[0]
+				result_b = self.s.read(4)
+				if not result_b:
+					raise ConnectionError('Did not receive result_b from picocoder after P_CMD_RESULT_SUCCESS')
+				result_b = struct.unpack("<I", result_b)[0]
+				return GlitchResult.SUCCESS, (performed, result_a, result_b)
+			elif data == P_CMD_RESULT_DEAD:
+				# TODO reset target?
+				return GlitchResult.DEAD, data
+			elif data in [P_CMD_RESULT_DEAD, P_CMD_RESULT_ZOMBIE, P_CMD_RESULT_DATA_TIMEOUT, P_CMD_RESULT_UNREACHABLE,
+				P_CMD_RESULT_UNCONNECTABLE, P_CMD_RESULT_UNTRIGGERED, P_CMD_RESULT_PMIC_FAIL]:
+				# TODO reset target?
+				return GlitchResult.BROKEN, data
+			else:
+				return GlitchResult.WEIRD, data
