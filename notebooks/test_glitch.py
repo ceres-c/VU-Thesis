@@ -5,12 +5,23 @@ GLITCHER_BAUD = 115200
 import glitch_utils
 from glitch_utils import GlitchyMcGlitchFace, GlitchResult
 from power_supply import PowerSupply, KA3305P
+import time
 
 glitcher = glitch_utils.GlitchyMcGlitchFace(GLITCHER_PORT, GLITCHER_BAUD)
 if not glitcher.ping():
 	raise Exception("Glitcher not responding")
-if not glitcher.ping_target():
-	raise Exception("Target not responding")
+
+ps = KA3305P(POWERSUPPLY_PORT)
+ps.con()
+ps.power_cycle()
+exit(22)
+# time.sleep(1.3) # Wait for power to raise
+ping = glitcher.ping_target()
+# time.sleep(0.25) # Wait for power to raise
+# glitcher.s.write(glitch_utils.P_CMD_DEBUG_PULSE)
+# glitcher.s.read(1)
+print(f"Target is {'alive' if ping else 'dead'}")
+exit(55)
 
 gc = glitch_utils.GlitchController(groups=[r.name for r in GlitchResult], parameters=['ext_offset', 'width', 'voltage'])
 gc.set_range('ext_offset', 1, 10)

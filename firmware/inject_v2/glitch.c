@@ -67,26 +67,46 @@ void irq_ping_target_reboot_counter(void) {
 		ping_target_count++;
 	}
 }
-bool ping_target_reboot(void) {
-
-}
-
 bool ping_target(void) {
-	uint32_t t;
+	/*
+	 * Counts the number of received `R` characters and compares to a fixed number that has been
+	 * verified to be sufficient to guarantee the board is actually running smoothly (not hanging
+	 * right after a reboot) and VCore is stable.
+	 */
 	bool ret = false;
+	uint32_t t;
+	ping_target_count = 0;
+	irq_set_exclusive_handler(UART0_IRQ, irq_ping_target_reboot_counter);
 
-	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
-		uart_getc(UART_TARGET);
+	gpio_put(PIN_DEBUG, 1); // TODO remove
+	busy_wait_us_32(10);
+	gpio_put(PIN_DEBUG, 0);
 
-	// Connect to target
+	volatile uint8_t data = uart_hw_read(); // Start off with a clean RX data register
 	t = time_us_32();
 	do {
-		if (uart_hw_readable()) {
+		if (uart_hw_readable()) goto reachable;
+	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	goto end;
+
+	reachable:
+	irq_set_enabled(UART0_IRQ, true);
+	uart_set_irq_enables(UART_TARGET, true, false);
+
+	for (int i = 0; i < PING_VCORE_STABLE_TIME_US / 3000; i++) {
+		busy_wait_us_32(3000);
+		if (ping_target_count >= PING_VCORE_STABLE_CHARS) {
 			ret = true;
 			break;
 		}
-	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	}
+	gpio_put(PIN_DEBUG, 1); // TODO remove
+	busy_wait_us_32(10);
+	gpio_put(PIN_DEBUG, 0);
 
+	end:
+	uart_set_irq_enables(UART_TARGET, false, false);
+	irq_set_enabled(UART0_IRQ, false);
 	return ret;
 }
 

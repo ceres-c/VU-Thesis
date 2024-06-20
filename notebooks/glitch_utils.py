@@ -238,19 +238,14 @@ class GlitchyMcGlitchFace:
 		Parameters:
 			timeout: timeout in seconds (default = 1.5 - on average it takes 800ms for the target to boot)
 		'''
-		steps = int(timeout / 0.1) if timeout > 0.1 else 1
-		old_timeout = self.s.timeout
-		self.s.timeout = 0.01
 		ret: bool = False
-
-		for _ in range(steps):
-			self.s.reset_input_buffer()
-			self.s.write(P_CMD_TARGET_PING)
-			res = self.s.read(1)
-			if int.from_bytes(res, 'little'):
-				ret = True
-				break
-			time.sleep(0.1)
+		old_timeout = self.s.timeout
+		self.s.timeout = 1
+		self.s.write(P_CMD_TARGET_PING)
+		res = self.s.read(1)
+		if int.from_bytes(res, 'little'):
+			ret = True
+		ret = False
 
 		self.s.timeout = old_timeout
 		return ret
