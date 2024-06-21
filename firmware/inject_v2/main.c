@@ -176,8 +176,8 @@ void process(pio_spi_inst_t *spi, int command) {
 		case P_CMD_ESTIMATE_OFFSET:
 			putu32(estimate_offset());
 			break;
-		case P_CMD_UART_DEBUG_TOGGLE:
-			putu32(uart_debug_pin_toggle());
+		case P_CMD_UART_TOGGLE_DEBUG_PIN:
+			putchar(uart_debug_pin_toggle());
 			break;
 		case P_CMD_DEBUG_PULSE:
 			gpio_put(PIN_DEBUG, 1);

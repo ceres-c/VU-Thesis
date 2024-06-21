@@ -25,7 +25,7 @@ P_CMD_PING					= b'\x70'	# Ping picocoder
 P_CMD_TARGET_PING			= b'\x71'	# Ping from picocoder to target
 P_CMD_UART_ECHO				= b'\x75'	# Set picocoder in UART echo mode (need power cycle to exit)
 P_CMD_ESTIMATE_OFFSET		= b'\x76'	# Estimate glitch offset (see fw code to know what this does)
-P_CMD_UART_DEBUG_TOGGLE		= b'\x77'	# Toggle debug pin (GPIO 16) on UART RX
+P_CMD_UART_TOGGLE_DEBUG_PIN	= b'\x77'	# Toggle debug pin (GPIO 16) on UART RX
 P_CMD_VOLT_TEST				= b'\x78'	# Start voltage reliability test
 P_CMD_DEBUG_PULSE			= b'\x79'	# Single 10 us pulse on debug pin
 
@@ -257,6 +257,30 @@ class GlitchyMcGlitchFace:
 
 		self.s.timeout = old_timeout
 		return ret
+
+	def estimate_ext_offset(self) -> int:
+		'''
+		Asks the picocoder to estimate the external glitch offset (see firmware code)
+		'''
+		self.s.reset_input_buffer()
+		self.s.write(P_CMD_ESTIMATE_OFFSET)
+		data = self.s.read(4)
+		if not data:
+			raise ConnectionError('Did not get any data from picocoder after P_CMD_ESTIMATE_OFFSET')
+		return struct.unpack("<i", data)[0]
+
+	def uart_toggle_debug_pin(self) -> None:
+		'''
+		Toggle debug pin (GPIO 16) on UART RX
+		This is used to measure the time between data appears on the channel and the pico detects it
+		'''
+		self.s.reset_input_buffer()
+		self.s.write(P_CMD_UART_TOGGLE_DEBUG_PIN)
+		data = self.s.read(1)
+		if not data:
+			raise ConnectionError('Could not toggle debug pin: no response')
+		if not bool(data):
+			raise ValueError(f'Could not toggle debug pin. Received: 0x{data.hex()}')
 
 	def find_crash_voltage(self, glitch_setting: Annotated[tuple[int], 2], expected: int) -> tuple[GlitchResult, int|bytes|None]:
 		'''

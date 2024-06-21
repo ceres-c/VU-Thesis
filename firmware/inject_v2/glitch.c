@@ -7,8 +7,8 @@ uint8_t ret_i = 0;
 
 #define UART_HW_NO_INPUT 0x100
 #define ESTIMATE_ROUNDS 100
-#define PICO_RX_TIME 85 // Time in us between UART data appearing on the channel and it
-						// being available to the Pico RX FIFO (measured externally)
+#define PICO_UART_RX_TIME 84	// Time in us between UART data appearing on the channel and it
+								// being available to the Pico RX FIFO (measured externally)
 
 inline static void uart_hw_write(uint8_t data) {
 	UART_TARGET_PTR->dr = data;
@@ -79,7 +79,7 @@ bool ping_target(void) {
 
 	volatile uint8_t data = uart_hw_read(); // Start off with a clean RX data register
 
-	uint32_t th = timer_hw->timerawh; // TODO use this structure everywhere
+	uint32_t th = timer_hw->timerawh;
 	uint32_t tl = timer_hw->timerawl;
 	th += tl + TARGET_REACHABLE_US < tl;
 	tl += TARGET_REACHABLE_US;
@@ -121,17 +121,24 @@ void uart_echo(void) {
 }
 
 bool glitch_sync(void) {
+	/*
+	 * Performs a glitch with the current glitch parameters and checks the target response.
+	 * It directly sends data over USB to the host with the result of the glitch.
+	 */
 	volatile uint8_t data;
-	uint32_t t;
+	uint32_t th, tl;
 
 	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
 		uart_getc(UART_TARGET);
 
 	// Connect to target
-	t = time_us_32();
+	th = timer_hw->timerawh;
+	tl = timer_hw->timerawl;
+	th += tl + TARGET_REACHABLE_US < tl;
+	tl += TARGET_REACHABLE_US;
 	do {
 		if (uart_hw_readable()) goto reachable;
-	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
 	putchar(P_CMD_RESULT_UNREACHABLE);
 	return false;
 
@@ -144,10 +151,13 @@ bool glitch_sync(void) {
 	uart_hw_write(T_CMD_CONNECT); // ACK connection
 
 	// Wait for trigger
-	t = time_us_32();
+	th = timer_hw->timerawh;
+	tl = timer_hw->timerawl;
+	th += tl + TARGET_REACHABLE_US < tl;
+	tl += TARGET_REACHABLE_US;
 	do {
 		if (uart_hw_readable()) goto triggered;
-	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
 	putchar(P_CMD_RESULT_UNTRIGGERED);
 	return false;
 
@@ -165,10 +175,13 @@ bool glitch_sync(void) {
 	}
 
 	// Check if target is still alive
-	t = time_us_32();
+	th = timer_hw->timerawh;
+	tl = timer_hw->timerawl;
+	th += tl + TARGET_REACHABLE_US < tl;
+	tl += TARGET_REACHABLE_US;
 	do {
 		if (uart_hw_readable()) goto alive;
-	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
 	putchar(P_CMD_RESULT_DEAD);
 	return false;
 
@@ -234,7 +247,7 @@ int estimate_offset(void) {
 	 *        can't estimate the duration of the wait loop on the target
 	 *  - -3: offset added by the loop is smaller than PICO_RX_TIME
 	 */
-	uint32_t t;
+	uint32_t th, tl;
 	volatile uint8_t data; // Used to flush the RX FIFO
 	uint32_t measurements[ESTIMATE_ROUNDS];
 	uint32_t standard_median = 0, extra_delay_median = 0, loop_duration = 0;
@@ -246,10 +259,14 @@ int estimate_offset(void) {
 	// Calculate median time between two resets in standard conditions
 	for (int i = 0; i < ESTIMATE_ROUNDS; i++) {
 		// Wait for connection init from target
-		t = time_us_32();
+
+		th = timer_hw->timerawh;
+		tl = timer_hw->timerawl;
+		th += tl + TARGET_REACHABLE_US < tl;
+		tl += TARGET_REACHABLE_US;
 		do {
 			if (uart_hw_readable()) goto reachable;
-		} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+		} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
 		return -1;
 
 		reachable:
@@ -257,10 +274,13 @@ int estimate_offset(void) {
 		data = uart_hw_read();
 		// Don't send anything, now the target will wait for timeout and then reset
 
-		t = time_us_32();
+		th = timer_hw->timerawh;
+		tl = timer_hw->timerawl;
+		th += tl + TARGET_REACHABLE_US < tl;
+		tl += TARGET_REACHABLE_US;
 		do {
 			if (uart_hw_readable()) goto reachable2;
-		} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+		} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
 		return -1;
 
 		reachable2:
@@ -279,10 +299,13 @@ int estimate_offset(void) {
 	}
 
 	// Wait for connection init from target, we need to instruct the target to skip the loop
-	t = time_us_32();
+	th = timer_hw->timerawh;
+	tl = timer_hw->timerawl;
+	th += tl + TARGET_REACHABLE_US < tl;
+	tl += TARGET_REACHABLE_US;
 	do {
 		if (uart_hw_readable()) goto send_cmd;
-	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
 	return -1;
 
 	send_cmd:
@@ -291,10 +314,13 @@ int estimate_offset(void) {
 
 	for (int i = 0; i < ESTIMATE_ROUNDS; i++) {
 		// Wait for connection init from target
-		t = time_us_32();
+		th = timer_hw->timerawh;
+		tl = timer_hw->timerawl;
+		th += tl + TARGET_REACHABLE_US < tl;
+		tl += TARGET_REACHABLE_US;
 		do {
 			if (uart_hw_readable()) goto reachable3;
-		} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+		} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
 		return -1;
 
 		reachable3:
@@ -302,10 +328,13 @@ int estimate_offset(void) {
 		data = uart_hw_read();
 		// Don't send anything, now the target will wait for timeout + extra delay, and then reset
 
-		t = time_us_32();
+		th = timer_hw->timerawh;
+		tl = timer_hw->timerawl;
+		th += tl + TARGET_REACHABLE_US < tl;
+		tl += TARGET_REACHABLE_US;
 		do {
 			if (uart_hw_readable()) goto reachable4;
-		} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+		} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
 		return -1;
 
 		reachable4:
@@ -324,10 +353,10 @@ int estimate_offset(void) {
 
 	loop_duration = extra_delay_median - standard_median;
 
-	if (loop_duration < PICO_RX_TIME)
+	if (loop_duration < PICO_UART_RX_TIME)
 		return -3;
 
-	return loop_duration - PICO_RX_TIME;
+	return loop_duration - PICO_UART_RX_TIME;
 }
 
 bool __no_inline_not_in_flash_func(uart_debug_pin_toggle)(void) {
@@ -336,10 +365,14 @@ bool __no_inline_not_in_flash_func(uart_debug_pin_toggle)(void) {
 	 * being on the UART channel, and it being available to the Pico.
 	 */
 	volatile uint8_t data = uart_hw_read(); // Start off with a clean RX data register
-	uint32_t t = time_us_32();
+
+	uint32_t th = timer_hw->timerawh;
+	uint32_t tl = timer_hw->timerawl;
+	th += tl + TARGET_REACHABLE_US < tl;
+	tl += TARGET_REACHABLE_US;
 	do {
 		if (uart_hw_readable()) goto toggle;
-	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
 	return false;
 
 	toggle:
@@ -378,7 +411,6 @@ int voltage_test(void) {
 	 */
 
 	int ret = 0;
-	uint32_t t;
 	uint32_t extra_delay = 0;
 	volt_dot_count = 0;
 	volt_dot_detected = false;
@@ -393,10 +425,14 @@ int voltage_test(void) {
 	irq_set_exclusive_handler(UART0_IRQ, irq_voltage_test_counter);
 
 	volatile uint8_t data = uart_hw_read(); // Start off with a clean RX data register
-	t = time_us_32();
+
+	uint32_t th = timer_hw->timerawh;
+	uint32_t tl = timer_hw->timerawl;
+	th += tl + TARGET_REACHABLE_US < tl;
+	tl += TARGET_REACHABLE_US;
 	do {
 		if (uart_hw_readable()) goto reachable;
-	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
 	ret = -1;
 	goto end;
 
