@@ -104,6 +104,7 @@ bool ping_target(void) {
 	end:
 	uart_set_irq_enables(UART_TARGET, false, false);
 	irq_set_enabled(UART0_IRQ, false);
+	irq_remove_handler(UART0_IRQ, irq_ping_target_reboot_counter);
 	return ret;
 }
 
@@ -393,7 +394,6 @@ void irq_voltage_test_counter(void) {
 		volt_done_alive = true;
 	}
 }
-
 int voltage_test(void) {
 	/*
 	 * Test target behavior at a given voltage when sending a fixed number (see target firmware)
@@ -460,5 +460,6 @@ int voltage_test(void) {
 	}
 
 	end:
+	irq_remove_handler(UART0_IRQ, irq_voltage_test_counter);
 	return ret;
 }
