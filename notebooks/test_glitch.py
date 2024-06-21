@@ -14,7 +14,7 @@ if not glitcher.ping():
 ps = KA3305P(POWERSUPPLY_PORT)
 ps.con()
 ps.power_cycle()
-exit(22)
+# exit(22)
 # time.sleep(1.3) # Wait for power to raise
 ping = glitcher.ping_target()
 # time.sleep(0.25) # Wait for power to raise

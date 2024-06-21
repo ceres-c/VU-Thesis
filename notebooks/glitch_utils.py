@@ -231,21 +231,29 @@ class GlitchyMcGlitchFace:
 			return True
 		return False
 
-	def ping_target(self, timeout=1.5) -> bool:
+	def ping_target(self, n = 15, delay = 0.1) -> bool:
 		'''
-		Ping target from picocoder
+		Ping target from picocoder.
+		At the glitcher end, the target ping funciton either returns within 7ms if the target is dead, or
+		after 350ms if the target is alive (gives VCore time to ramp up, in case the target just came up).
+		Therefore, this function could possibly take a considerable amount of time (0.5s) to execute.
 
 		Parameters:
-			timeout: timeout in seconds (default = 1.5 - on average it takes 800ms for the target to boot)
+			n: number of attempts to ping the target
+			delay: delay between attempts
 		'''
-		ret: bool = False
 		old_timeout = self.s.timeout
-		self.s.timeout = 1
-		self.s.write(P_CMD_TARGET_PING)
-		res = self.s.read(1)
-		if int.from_bytes(res, 'little'):
-			ret = True
-		ret = False
+		self.s.timeout = 0.5 # This function might take some extra time on the pico side (wait for vcore to reach setpoint)
+		ret: bool = False
+
+		for _ in range(n):
+			self.s.reset_input_buffer()
+			self.s.write(P_CMD_TARGET_PING)
+			res = self.s.read(1)
+			if int.from_bytes(res, 'little'):
+				ret = True
+				break
+			time.sleep(delay)
 
 		self.s.timeout = old_timeout
 		return ret
@@ -254,7 +262,7 @@ class GlitchyMcGlitchFace:
 		'''
 		Estimates a stable voltage for the target
 
-		Args:
+		Parameters:
 			glitch_setting: Glitch settings to use. Tuple of (width, voltage)
 			expected: Number of expected bytes sent by the target
 		'''

@@ -74,22 +74,22 @@ bool ping_target(void) {
 	 * right after a reboot) and VCore is stable.
 	 */
 	bool ret = false;
-	uint32_t t;
 	ping_target_count = 0;
 	irq_set_exclusive_handler(UART0_IRQ, irq_ping_target_reboot_counter);
 
-	gpio_put(PIN_DEBUG, 1); // TODO remove
-	busy_wait_us_32(10);
-	gpio_put(PIN_DEBUG, 0);
-
 	volatile uint8_t data = uart_hw_read(); // Start off with a clean RX data register
-	t = time_us_32();
+
+	uint32_t th = timer_hw->timerawh; // TODO use this structure everywhere
+	uint32_t tl = timer_hw->timerawl;
+	th += tl + TARGET_REACHABLE_US < tl;
+	tl += TARGET_REACHABLE_US;
 	do {
 		if (uart_hw_readable()) goto reachable;
-	} while ((time_us_32() - t) <= TARGET_REACHABLE_US);
+	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
 	goto end;
 
 	reachable:
+
 	irq_set_enabled(UART0_IRQ, true);
 	uart_set_irq_enables(UART_TARGET, true, false);
 
@@ -100,9 +100,6 @@ bool ping_target(void) {
 			break;
 		}
 	}
-	gpio_put(PIN_DEBUG, 1); // TODO remove
-	busy_wait_us_32(10);
-	gpio_put(PIN_DEBUG, 0);
 
 	end:
 	uart_set_irq_enables(UART_TARGET, false, false);

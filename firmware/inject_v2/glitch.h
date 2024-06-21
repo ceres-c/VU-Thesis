@@ -8,8 +8,8 @@
 #define READ_TIMEOUT_CYCLES			5000 // At the standard 125MHz, this is 8ns*5000 = 40us (plus loop overhead)
 #define TARGET_REACHABLE_US			7000 // The target sends a `R` every 3ms, if after 7ms we haven't seen it, it's dead
 #define VOLT_TEST_TIMEOUT_US		6000 // 6ms timeout to receive all bytes in a voltage test (it normally takes ~5ms)
-#define PING_VCORE_STABLE_TIME_US	300000
-#define PING_VCORE_STABLE_CHARS		90
+#define PING_VCORE_STABLE_TIME_US	350000
+#define PING_VCORE_STABLE_CHARS		110
 
 typedef enum {
 	TARGET_IGNORE,		// Disarmed
