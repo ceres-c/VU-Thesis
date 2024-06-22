@@ -55,6 +55,22 @@ void target_uart_init(void) {
 	uart_level_shifter_enable();
 }
 
+static void sort(uint32_t *arr, int n) {
+	/*
+	 * Simple bubble sort implementation to sort an array of uint32_t values.
+	 * Good enough to calculate the median of a small array.
+	 */
+	for (int i = 0; i < n; i++) {
+		for (int j = i + 1; j < n; j++) {
+			if (arr[i] > arr[j]) {
+				uint32_t temp = arr[i];
+				arr[i] = arr[j];
+				arr[j] = temp;
+			}
+		}
+	}
+}
+
 uint ping_target_count = 0;
 void irq_ping_target_reboot_counter(void) {
 	/* Registered as a UART IRQ, whenever an `R` is received it increments ping_target_count */
@@ -117,35 +133,25 @@ void uart_echo(void) {
 	}
 }
 
-bool glitch_sync(void) {
+bool glitcher_arm(void) {
 	/*
 	 * Performs a glitch with the current glitch parameters and checks the target response.
 	 * It directly sends data over USB to the host with the result of the glitch.
+	 * Can send 3 different results:
+	 *	- P_CMD_RESULT_UNREACHABLE: no trigger received
+	 *	- P_CMD_RESULT_PMIC_FAIL: could not send command to PMIC over i2c
+	 *	- P_CMD_RESULT_RESET: target died during the glitch
+	 *	- P_CMD_RESULT_NORMAL: glitch did not work, board continued running normally
+	 *	- P_CMD_RESULT_SUCCESS: glitch worked
+	 *		Will send 3 additional uint32_t values with the results (performed iterations, result A, result B)
+	 *	- P_CMD_RESULT_DATA_TIMEOUT: target reported a success when glitching, but did not send data back after glitch
+	 *	- P_CMD_RESULT_ZOMBIE: target sent some other unexpected data (?)
+	 *		Will send 1 uint8_t value with the unexpected data
 	 */
 	volatile uint8_t data;
 	uint32_t th, tl;
 
-	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
-		uart_getc(UART_TARGET);
-
-	// Connect to target
-	th = timer_hw->timerawh;
-	tl = timer_hw->timerawl;
-	th += tl + TARGET_REACHABLE_US < tl;
-	tl += TARGET_REACHABLE_US;
-	do {
-		if (uart_hw_readable()) goto reachable;
-	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
-	putchar(P_CMD_RESULT_UNREACHABLE);
-	return false;
-
-	reachable:
-	data = uart_hw_read();
-	if (data != T_CMD_READY) {
-		putchar(P_CMD_RESULT_UNCONNECTABLE);
-		return false;
-	}
-	uart_hw_write(T_CMD_CONNECT); // ACK connection
+	data = uart_hw_read(); // Clear the RX FIFO
 
 	// Wait for trigger
 	th = timer_hw->timerawh;
@@ -155,17 +161,17 @@ bool glitch_sync(void) {
 	do {
 		if (uart_hw_readable()) goto triggered;
 	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
-	putchar(P_CMD_RESULT_UNTRIGGERED);
+	putchar(P_CMD_RESULT_UNREACHABLE);
 	return false;
 
 	triggered:
-	data = uart_hw_read(); // Clear the RX FIFO
 	int write_prep_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_prep, TPS_WRITE_REG_CMD_LEN, false, 100);
 	busy_wait_us_32(glitch.ext_offset);
 	int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
 	busy_wait_us_32(glitch.width);
 	int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
 
+	data = uart_hw_read(); // Clear the RX FIFO (doing it now as it's not time critical)
 	if (write_prep_res != TPS_WRITE_REG_CMD_LEN | write_glitch_res != TPS_WRITE_REG_CMD_LEN || write_restore_res != TPS_WRITE_REG_CMD_LEN) {
 		putchar(P_CMD_RESULT_PMIC_FAIL);
 		return false;
@@ -179,16 +185,18 @@ bool glitch_sync(void) {
 	do {
 		if (uart_hw_readable()) goto alive;
 	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
-	putchar(P_CMD_RESULT_DEAD);
+	putchar(P_CMD_RESULT_RESET);
 	return false;
 
 	alive:
 	data = uart_hw_read();
 	switch (data) {
-	case T_CMD_NORMAL:
+	case T_CMD_READY:
+		// ready -> nothing happened, glitch not working
 		putchar(P_CMD_RESULT_NORMAL);
 		break;
 	case T_CMD_SUCCESS:
+		// success -> glitch worked
 		readu32_t performed, result_a, result_b;
 		uart_hw_readu32(&performed);
 		uart_hw_readu32(&result_a);
@@ -202,29 +210,15 @@ bool glitch_sync(void) {
 			putu32(result_b.val);
 		}
 		break;
-	case T_CMD_READY:
-		putchar(P_CMD_RESULT_RESET);
-		break;
 	default:
 		putchar(P_CMD_RESULT_ZOMBIE);
+		putchar(data);
 		break;
 	}
 	return true;
 }
 
-static void sort(uint32_t *arr, int n) {
-	for (int i = 0; i < n; i++) {
-		for (int j = i + 1; j < n; j++) {
-			if (arr[i] > arr[j]) {
-				uint32_t temp = arr[i];
-				arr[i] = arr[j];
-				arr[j] = temp;
-			}
-		}
-	}
-}
-
-int estimate_offset(void) {
+int measure_loop(void) {
 	/*
 	 * This function gives a rough estimate for the glitch offset parameter.
 	 * It takes into account:
@@ -247,7 +241,7 @@ int estimate_offset(void) {
 	uint32_t th, tl;
 	volatile uint8_t data; // Used to flush the RX FIFO
 	uint32_t measurements[ESTIMATE_ROUNDS];
-	uint32_t standard_median = 0, extra_delay_median = 0, loop_duration = 0;
+	uint32_t loop_duration = 0;
 
 	while(uart_hw_readable()) { // Drain buffer
 		data = uart_hw_read();
@@ -287,73 +281,7 @@ int estimate_offset(void) {
 		measurements[i] = t2 - t1;
 	}
 	sort(measurements, ESTIMATE_ROUNDS);
-	standard_median = measurements[ESTIMATE_ROUNDS / 2];
-
-	// Now we will measure the time between two resets when the target adds a fixed delay
-	// (same as the one used in the glitching routine) between two resets.
-	while(uart_hw_readable()) { // Drain buffer
-		data = uart_hw_read();
-	}
-
-	// Wait for connection init from target, we need to instruct the target to skip the loop
-	th = timer_hw->timerawh;
-	tl = timer_hw->timerawl;
-	th += tl + TARGET_REACHABLE_US < tl;
-	tl += TARGET_REACHABLE_US;
-	do {
-		if (uart_hw_readable()) goto send_cmd;
-	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
-	return -1;
-
-	send_cmd:
-	data = uart_hw_read();
-	uart_hw_write(T_CMD_EXTRA_WAIT); // Tell the target to skip the loop on next reset
-
-	for (int i = 0; i < ESTIMATE_ROUNDS; i++) {
-		// Wait for connection init from target
-		th = timer_hw->timerawh;
-		tl = timer_hw->timerawl;
-		th += tl + TARGET_REACHABLE_US < tl;
-		tl += TARGET_REACHABLE_US;
-		do {
-			if (uart_hw_readable()) goto reachable3;
-		} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
-		return -1;
-
-		reachable3:
-		uint32_t t1 = time_us_32();
-		data = uart_hw_read();
-		// Don't send anything, now the target will wait for timeout + extra delay, and then reset
-
-		th = timer_hw->timerawh;
-		tl = timer_hw->timerawl;
-		th += tl + TARGET_REACHABLE_US < tl;
-		tl += TARGET_REACHABLE_US;
-		do {
-			if (uart_hw_readable()) goto reachable4;
-		} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
-		return -1;
-
-		reachable4:
-		uint32_t t2 = time_us_32();
-		data = uart_hw_read();
-		uart_hw_write(T_CMD_EXTRA_WAIT); // Tell the target to skip the loop on next reset
-
-		measurements[i] = t2 - t1;
-	}
-	sort(measurements, ESTIMATE_ROUNDS);
-	extra_delay_median = measurements[ESTIMATE_ROUNDS / 2];
-
-	if (standard_median >= extra_delay_median) {
-		return -2;
-	}
-
-	loop_duration = extra_delay_median - standard_median;
-
-	if (loop_duration < PICO_UART_RX_TIME)
-		return -3;
-
-	return loop_duration - PICO_UART_RX_TIME;
+	return measurements[ESTIMATE_ROUNDS / 2] - PICO_UART_RX_TIME;
 }
 
 bool __no_inline_not_in_flash_func(uart_debug_pin_toggle)(void) {
@@ -375,87 +303,4 @@ bool __no_inline_not_in_flash_func(uart_debug_pin_toggle)(void) {
 	toggle:
 	gpio_xor_mask(PIN_DEBUG_MASK);
 	return true;
-}
-
-uint volt_dot_count = 0;
-bool volt_dot_detected = false;
-bool volt_done_alive = false;
-void irq_voltage_test_counter(void) {
-	/* Registered as a UART IRQ, whenever a byte is received it increments volt_dot_count */
-	volatile uint8_t d = uart_get_hw(UART_TARGET)->dr; // Clear the interrupt
-	if (d == T_CMD_VOLT_TEST_PING) {
-		volt_dot_count++;
-		volt_dot_detected = true;
-	} else if (d == T_CMD_READY && volt_dot_detected) {
-		volt_done_alive = true;
-	}
-}
-int voltage_test(void) {
-	/*
-	 * Test target behavior at a given voltage when sending a fixed number (see target firmware)
-	 * of T_CMD_VOLT_TEST_PING characters. The number of actually received characters is returned.
-	 * The target voltage must be set before calling this function (P_CMD_SET_VOLTAGE).
-	 * This function will count incoming characters before the timeout is reached.
-	 *
-	 * The drop width and external offset are configured the same way as for the glitching routine.
-	 *
-	 * Returns:
-	 *  - -1: target is unreachable
-	 *  - -2: target died during the test
-	 *  - -3: could not send command to PMIC to set glitch target voltage/restore standard voltage
-	 *  - >=0: the number of received T_CMD_VOLT_TEST_PING characters
-	 */
-
-	int ret = 0;
-	uint32_t extra_delay = 0;
-	volt_dot_count = 0;
-	volt_dot_detected = false;
-	volt_done_alive = false;
-
-	if (glitch.width > VOLT_TEST_TIMEOUT_US) {
-		extra_delay = 0;
-	} else {
-		extra_delay = VOLT_TEST_TIMEOUT_US - glitch.width;
-	}
-
-	irq_set_exclusive_handler(UART0_IRQ, irq_voltage_test_counter);
-
-	volatile uint8_t data = uart_hw_read(); // Start off with a clean RX data register
-
-	uint32_t th = timer_hw->timerawh;
-	uint32_t tl = timer_hw->timerawl;
-	th += tl + TARGET_REACHABLE_US < tl;
-	tl += TARGET_REACHABLE_US;
-	do {
-		if (uart_hw_readable()) goto reachable;
-	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
-	ret = -1;
-	goto end;
-
-	reachable:
-	uart_hw_write(T_CMD_VOLT_TEST);
-
-	irq_set_enabled(UART0_IRQ, true);
-	uart_set_irq_enables(UART_TARGET, true, false);
-
-	busy_wait_us_32(glitch.ext_offset);
-	int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
-	busy_wait_us_32(glitch.width);
-	int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
-	busy_wait_us_32(extra_delay); // Wait for the target to send all the data back
-
-	uart_set_irq_enables(UART_TARGET, false, false);
-	irq_set_enabled(UART0_IRQ, false);
-
-	if (write_glitch_res != TPS_WRITE_REG_CMD_LEN || write_restore_res != TPS_WRITE_REG_CMD_LEN) {
-		ret = -3;
-	} else if (!volt_done_alive) {
-		ret = -2;
-	} else {
-		ret = volt_dot_count;
-	}
-
-	end:
-	irq_remove_handler(UART0_IRQ, irq_voltage_test_counter);
-	return ret;
 }

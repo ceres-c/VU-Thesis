@@ -28,19 +28,15 @@ typedef struct readu32_s {
 void target_uart_init(void);
 bool ping_target(void);
 void uart_echo(void);
-bool glitch_sync(void);
-int estimate_offset(void);
+bool glitcher_arm(void);
+int measure_loop(void);
 bool uart_debug_pin_toggle(void);
-int voltage_test(void);
 
 static inline void uart_level_shifter_enable(void) {
 	*SET_GPIO_ATOMIC = 1 << PIN_UART_OE;
 }
 static inline void uart_level_shifter_disable(void) {
 	*CLR_GPIO_ATOMIC = 1 << PIN_UART_OE;
-}
-static inline bool glitcher_arm(void) { // TODO remove this function
-	return glitch_sync();
 }
 
 #endif // _GLITCH_H

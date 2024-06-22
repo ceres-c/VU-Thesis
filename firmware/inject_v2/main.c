@@ -173,8 +173,8 @@ void process(pio_spi_inst_t *spi, int command) {
 		case P_CMD_TARGET_PING:
 			putchar(ping_target());
 			break;
-		case P_CMD_ESTIMATE_OFFSET:
-			putu32(estimate_offset());
+		case P_CMD_MEASURE_LOOP_DURATION:
+			putu32(measure_loop());
 			break;
 		case P_CMD_UART_TOGGLE_DEBUG_PIN:
 			putchar(uart_debug_pin_toggle());
@@ -185,8 +185,6 @@ void process(pio_spi_inst_t *spi, int command) {
 			gpio_put(PIN_DEBUG, 0);
 			putchar(P_CMD_RETURN_OK);
 			break;
-		case P_CMD_VOLT_TEST:
-			putu32(voltage_test());
 		default:
 			putchar(S_NAK);
 	}

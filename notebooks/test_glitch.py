@@ -16,11 +16,6 @@ if not glitcher.ping():
 # ps.power_cycle()
 ping = glitcher.ping_target()
 print(f"Target is {'alive' if ping else 'dead'}")
-
-glitcher.s.reset_input_buffer() # Clear any pending data, just in case
-glitcher.s.write(glitch_utils.P_CMD_VOLT_TEST)
-data = glitcher.s.read(4)
-print(f"Voltage test: {data.hex()}")
 exit(55)
 
 gc = glitch_utils.GlitchController(groups=[r.name for r in GlitchResult], parameters=['ext_offset', 'width', 'voltage'])
