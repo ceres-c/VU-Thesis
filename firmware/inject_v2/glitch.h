@@ -11,14 +11,6 @@
 #define PING_VCORE_STABLE_TIME_US	350000
 #define PING_VCORE_STABLE_CHARS		110
 
-typedef enum {
-	TARGET_IGNORE,		// Disarmed
-	TARGET_UNKNOWN,		// Either disconnected or unknown state
-	TARGET_READY,		// Target is connected and ready to be glitched
-	TARGET_GLITCHED,	// Done the glitch
-} target_state_t;
-extern target_state_t target_state;
-
 typedef struct glitch_s {
 	uint32_t ext_offset;
 	uint32_t width;
@@ -47,8 +39,7 @@ static inline void uart_level_shifter_enable(void) {
 static inline void uart_level_shifter_disable(void) {
 	*CLR_GPIO_ATOMIC = 1 << PIN_UART_OE;
 }
-static inline bool glitcher_arm(void) {
-	target_state = TARGET_UNKNOWN;
+static inline bool glitcher_arm(void) { // TODO remove this function
 	return glitch_sync();
 }
 

@@ -1,9 +1,6 @@
 #include "glitch.h"
 
-target_state_t target_state = TARGET_IGNORE;
-glitch_t glitch = {0, 0, {TPS_REG_BUCK2CTRL, TPS_VCORE_SAFE}, {TPS_REG_BUCK2CTRL, TPS_VCORE_MIN}, {TPS_REG_BUCK2CTRL, TPS_VCORE_SAFE}};
-uint8_t retval[4] = {0, 0, 0, 0};
-uint8_t ret_i = 0;
+glitch_t glitch = {0, 0, {TPS_REG_BUCK2CTRL, TPS_VCORE_MAX}, {TPS_REG_BUCK2CTRL, TPS_VCORE_MIN}, {TPS_REG_BUCK2CTRL, TPS_VCORE_MAX}};
 
 #define UART_HW_NO_INPUT 0x100
 #define ESTIMATE_ROUNDS 100
@@ -52,7 +49,6 @@ void target_uart_init(void) {
 	uart_set_format(UART_TARGET, UART_TARGET_DATA_BITS, UART_TARGET_STOP_BITS, UART_TARGET_PARITY);
 	uart_set_fifo_enabled(UART_TARGET, false); // Char by char
 
-	target_state = TARGET_IGNORE;
 	if (uart_is_readable_within_us(UART_TARGET, 100)) // Drain buffer
 		uart_getc(UART_TARGET);
 

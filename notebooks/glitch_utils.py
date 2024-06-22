@@ -380,6 +380,9 @@ class GlitchyMcGlitchFace:
 				- result_a
 				- result_b
 			where result_a and result_b are the two multiplication values
+
+			Parameters:
+				glitch_setting: Glitch settings to use. Tuple of (ext_offset, prep_voltage)
 			'''
 
 			if not self._connected:

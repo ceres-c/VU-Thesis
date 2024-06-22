@@ -41,7 +41,5 @@
 #define TPS_VCORE_MIN_V				0.5f
 #define TPS_VCORE_MAX				0b1001011 // 1.24V - Do not go above this value to avoid frying the CPU
 #define TPS_VCORE_MAX_V				1.24f	  // Value sniffed from the bus when running stress
-#define TPS_VCORE_SAFE				0b1001001 // 1.22V - Safe operating voltage for the CPU
-#define TPS_VCORE_SAFE_V			1.22f	  // Safe operating voltage for the CPU
 
 #endif // _PMBUS_H
