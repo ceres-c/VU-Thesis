@@ -143,7 +143,7 @@ bool glitcher_arm(void) {
 	 *	- P_CMD_RESULT_RESET: target died during the glitch
 	 *	- P_CMD_RESULT_NORMAL: glitch did not work, board continued running normally
 	 *	- P_CMD_RESULT_SUCCESS: glitch worked
-	 *		Will send 3 additional uint32_t values with the results (performed iterations, result A, result B)
+	 *		Will send 3 additional uint32_t values with the results (number of successes, result A, result B)
 	 *	- P_CMD_RESULT_DATA_TIMEOUT: target reported a success when glitching, but did not send data back after glitch
 	 *	- P_CMD_RESULT_ZOMBIE: target sent some other unexpected data (?)
 	 *		Will send 1 uint8_t value with the unexpected data
@@ -197,15 +197,15 @@ bool glitcher_arm(void) {
 		break;
 	case T_CMD_SUCCESS:
 		// success -> glitch worked
-		readu32_t performed, result_a, result_b;
-		uart_hw_readu32(&performed);
+		readu32_t successes, result_a, result_b;
+		uart_hw_readu32(&successes);
 		uart_hw_readu32(&result_a);
 		uart_hw_readu32(&result_b);
-		if (!performed.valid || !result_a.valid || !result_b.valid) {
+		if (!successes.valid || !result_a.valid || !result_b.valid) {
 			putchar(P_CMD_RESULT_DATA_TIMEOUT);
 		} else {
 			putchar(P_CMD_RESULT_SUCCESS);
-			putu32(performed.val);
+			putu32(successes.val);
 			putu32(result_a.val);
 			putu32(result_b.val);
 		}

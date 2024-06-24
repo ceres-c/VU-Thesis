@@ -59,6 +59,7 @@ class GlitchResult(str, Enum): # str is needed to allow the enum to be a dict ke
 	NORMAL					= '1b'	# Blue		Y (rotated cross)
 	WEIRD					= '<y'	# Yellow	Triangle pointing left (solid)
 	SUCCESS					= 'og'	# Green		Circle (solid)
+	HALF_SUCCESS			= '*g'	# Green		Star (solid)
 	BROKEN					= 'Dm'	# Magenta	Diamond (solid)
 
 class GlitchController:
@@ -190,8 +191,10 @@ class GlitchyMcGlitchFace:
 		'''
 		Preparation voltage Vp - see Voltpillager paper
 		'''
-		raise NotImplementedError
-		# TODO
+		if self._prep_voltage is None:
+			# TODO get from device
+			raise NotImplementedError
+		return self._prep_voltage
 	@prep_voltage.setter
 	def prep_voltage(self, value: int):
 		if self._prep_voltage == value:
@@ -329,7 +332,7 @@ class GlitchyMcGlitchFace:
 			return GlitchResult.SUCCESS, (performed, result_a, result_b)
 		elif data == P_CMD_RESULT_DATA_TIMEOUT:
 			# Target reported a success when glitching, but did not send data back after glitch
-			return GlitchResult.BROKEN, data
+			return GlitchResult.HALF_SUCCESS, data
 		elif data == P_CMD_RESULT_ZOMBIE:
 			# Target sent some other unexpected data
 			unexpected_data = self.s.read(1)
@@ -344,7 +347,7 @@ class GlitchyMcGlitchFace:
 		'''
 		Perform a glitch on `mul` with the given settings.
 		When a successful glitch is performed, the function returns a tuple with:
-			- the number of performed iterations
+			- the number of successful glitches in the current loop
 			- result_a
 			- result_b
 		where result_a and result_b are the two multiplication values
@@ -397,7 +400,7 @@ class GlitchyMcGlitchFace:
 			return GlitchResult.SUCCESS, (performed, result_a, result_b)
 		elif data == P_CMD_RESULT_DATA_TIMEOUT:
 			# Target reported a success when glitching, but did not send data back after glitch
-			return GlitchResult.BROKEN, data
+			return GlitchResult.HALF_SUCCESS, data
 		elif data == P_CMD_RESULT_ZOMBIE:
 			# Target sent some other unexpected data
 			unexpected_data = self.s.read(1)
