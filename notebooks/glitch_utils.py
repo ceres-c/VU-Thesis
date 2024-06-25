@@ -55,36 +55,49 @@ class GlitchResult(str, Enum): # str is needed to allow the enum to be a dict ke
 	'''
 	Glitch result (processed from raw picocoder return codes)
 	'''
-	RESET					= 'xr'	# Red		Cross
+	RESET					= 'xr'	# Red		X
 	NORMAL					= '1b'	# Blue		Y (rotated cross)
 	WEIRD					= '<y'	# Yellow	Triangle pointing left (solid)
 	SUCCESS					= 'og'	# Green		Circle (solid)
-	HALF_SUCCESS			= '*g'	# Green		Star (solid)
-	BROKEN					= 'Dm'	# Magenta	Diamond (solid)
+	HALF_SUCCESS			= '^g'	# Green		Triangle pointing up (solid)
+	BROKEN					= '>m'	# Magenta	Triangle pointing right (solid)
 
 class GlitchController:
-	# def __init__(self, groups: list[str], parameters: list[str], slew_rate: int, pmic_cmd_runtime: int): # TODO remove
+	'''
+	Glitch campaign controller. Generates glitch values and stores results
+	'''
 	def __init__(self, groups: list[str], parameters: list[str]):
 		'''
-		Parameters:
-			groups: List of groups to use
-			parameters: List of parameters to use
-			slew_rate: Slew rate of the PMIC (in VID-steps/us) # TODO remove
-			pmic_cmd_runtime: Time necessary to send a command to the PMIC (in us)
+		Args:
+			groups: List of result groups (the possible result values)
+			parameters: List of parameters that the glitch controller will generate (the glitch search space)
 		'''
 		self.groups = groups
 		self.params = {param: {'start': 0, 'end': 0, 'step': 1} for param in parameters}
 		self.results: list[tuple[tuple[int, ...], GlitchResult]] = []
-		# self.slew_rate = slew_rate
-		# self.pmic_cmd_runtime = pmic_cmd_runtime
 
 	def set_range(self, param: str, start: int, end: int) -> None:
+		'''
+		Set the range of a parameter
+
+		Args:
+			param: Name of the parameter to set
+			start: Start value
+			end: End value
+		'''
 		if param not in self.params:
 			raise ValueError(f'Parameter {param} not found')
 		self.params[param]['start'] = start
 		self.params[param]['end'] = end
 
 	def set_step(self, param: str, step: int) -> None:
+		'''
+		Set the stepping value of a parameter (how much to increment/decrement the parameter by)
+
+		Args:
+			param: Name of the parameter to set
+			step: Step value
+		'''
 		if param not in self.params:
 			raise ValueError(f'Parameter {param} not found')
 		self.params[param]['step'] = step
@@ -109,30 +122,42 @@ class GlitchController:
 			yield combination
 
 	def add_result(self, glitch_values: tuple[int, ...], result: GlitchResult):
+		'''
+		Add a result to the result list
+
+		Args:
+			glitch_values: The glitch values used to achieve the result
+			result: The result of the glitch
+		'''
 		self.results.append((glitch_values, result))
 
-	# def check_width(self, width, prep_voltage, voltage): # TODO remove
-	# 	'''
-	# 	Checks if the width is too small to achieve the required voltage drop
+	def check_width(self, width, prep_voltage, voltage):
+		'''
+		Checks if the width is too small to achieve the required voltage drop
 
-	# 	Parameters:
-	# 		width (int): The width to check in us
-	# 		prep_voltage (int): The prep voltage VID (Voltage IDentifier) from TPS65094 datasheet
-	# 		voltage (int): The voltage drop VID
-	# 	'''
-	# 	# # Convert VID to voltage
-	# 	# voltage_v = 0 if voltage == 0 else 0.5 + (voltage - 1) * 0.01
-	# 	# prep_voltage_v = 0 if prep_voltage == 0 else 0.5 + (prep_voltage - 1) * 0.01
+		Args:
+			width (int): The width to check in us
+			prep_voltage (int): The prep voltage VID (Voltage IDentifier) from PMIC datasheet
+			voltage (int): The voltage drop VID
+		'''
+		raise NotImplementedError('Use PMIC-specific glitch controller')
 
-	# 	delta_t = self.pmic_cmd_runtime + width
-	# 	max_vid_drop = delta_t * self.slew_rate
-	# 	delta_vid = abs(prep_voltage - voltage)
-	# 	return max_vid_drop > delta_vid
+class GlitchControllerTPS65094(GlitchController):
+	'''
+	Glitch controller for TPS65094 PMIC on Up Squared Pentium N4200 boards
+	'''
+	I2C_CMD_TRANSMIT = 36 # us
+	SLEW_RATE = 3 # mV/us
 
-	# 	delta_t = self.pmic_cmd_runtime + width
-	# 	max_voltage_drop = delta_t * self.slew_rate / 1000
-	# 	delta_v = abs(prep_voltage_v - voltage_v)
-	# 	return max_voltage_drop > delta_v
+	def check_width(self, width, prep_voltage, voltage):
+		# Convert VID to voltage
+		voltage_v = 0 if voltage == 0 else 0.5 + (voltage - 1) * 0.01
+		prep_voltage_v = 0 if prep_voltage == 0 else 0.5 + (prep_voltage - 1) * 0.01
+
+		delta_t = self.I2C_CMD_TRANSMIT + width
+		max_voltage_drop = delta_t * self.SLEW_RATE / 1000
+		delta_v = abs(prep_voltage_v - voltage_v)
+		return max_voltage_drop > delta_v
 
 class GlitchyMcGlitchFace:
 	s: serial.Serial = None # type: ignore
@@ -266,7 +291,7 @@ class GlitchyMcGlitchFace:
 		after 350ms if the target is alive (gives VCore time to ramp up, in case the target just came up).
 		Therefore, this function could possibly take a considerable amount of time (0.5s) to execute.
 
-		Parameters:
+		Args:
 			n: number of attempts to ping the target
 			delay: delay between attempts
 		'''
@@ -385,7 +410,7 @@ class GlitchyMcGlitchFace:
 			- result_b
 		where result_a and result_b are the two multiplication values
 
-		Parameters:
+		Args:
 			glitch_setting: Glitch settings to use. Tuple of (ext_offset, prep_voltage)
 		'''
 
