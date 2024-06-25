@@ -59,7 +59,7 @@ class GlitchResult(str, Enum): # str is needed to allow the enum to be a dict ke
 	NORMAL					= '1b'	# Blue		Y (rotated cross)
 	WEIRD					= '<y'	# Yellow	Triangle pointing left (solid)
 	SUCCESS					= 'og'	# Green		Circle (solid)
-	HALF_SUCCESS			= '^g'	# Green		Triangle pointing up (solid)
+	HALF_SUCCESS			= '^c'	# Cyan		Triangle pointing up (solid)
 	BROKEN					= '>m'	# Magenta	Triangle pointing right (solid)
 
 class GlitchController:
