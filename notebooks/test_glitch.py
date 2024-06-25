@@ -11,11 +11,14 @@ glitcher = glitch_utils.GlitchyMcGlitchFace(GLITCHER_PORT, GLITCHER_BAUD)
 if not glitcher.ping():
 	raise Exception("Glitcher not responding")
 
-# ps = KA3305P(POWERSUPPLY_PORT)
-# ps.con()
-# ps.power_cycle()
+ps = KA3305P(POWERSUPPLY_PORT)
+ps.con()
+ps.power_cycle()
 ping = glitcher.ping_target()
 print(f"Target is {'alive' if ping else 'dead'}")
+
+max_total_duration = glitcher.measure_loop_duration()
+print(f"Max loop duration: {max_total_duration} us")
 exit(55)
 
 gc = glitch_utils.GlitchController(groups=[r.name for r in GlitchResult], parameters=['ext_offset', 'width', 'voltage'])

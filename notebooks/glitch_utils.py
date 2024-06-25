@@ -63,10 +63,20 @@ class GlitchResult(str, Enum): # str is needed to allow the enum to be a dict ke
 	BROKEN					= 'Dm'	# Magenta	Diamond (solid)
 
 class GlitchController:
+	# def __init__(self, groups: list[str], parameters: list[str], slew_rate: int, pmic_cmd_runtime: int): # TODO remove
 	def __init__(self, groups: list[str], parameters: list[str]):
+		'''
+		Parameters:
+			groups: List of groups to use
+			parameters: List of parameters to use
+			slew_rate: Slew rate of the PMIC (in VID-steps/us) # TODO remove
+			pmic_cmd_runtime: Time necessary to send a command to the PMIC (in us)
+		'''
 		self.groups = groups
 		self.params = {param: {'start': 0, 'end': 0, 'step': 1} for param in parameters}
 		self.results: list[tuple[tuple[int, ...], GlitchResult]] = []
+		# self.slew_rate = slew_rate
+		# self.pmic_cmd_runtime = pmic_cmd_runtime
 
 	def set_range(self, param: str, start: int, end: int) -> None:
 		if param not in self.params:
@@ -100,6 +110,29 @@ class GlitchController:
 
 	def add_result(self, glitch_values: tuple[int, ...], result: GlitchResult):
 		self.results.append((glitch_values, result))
+
+	# def check_width(self, width, prep_voltage, voltage): # TODO remove
+	# 	'''
+	# 	Checks if the width is too small to achieve the required voltage drop
+
+	# 	Parameters:
+	# 		width (int): The width to check in us
+	# 		prep_voltage (int): The prep voltage VID (Voltage IDentifier) from TPS65094 datasheet
+	# 		voltage (int): The voltage drop VID
+	# 	'''
+	# 	# # Convert VID to voltage
+	# 	# voltage_v = 0 if voltage == 0 else 0.5 + (voltage - 1) * 0.01
+	# 	# prep_voltage_v = 0 if prep_voltage == 0 else 0.5 + (prep_voltage - 1) * 0.01
+
+	# 	delta_t = self.pmic_cmd_runtime + width
+	# 	max_vid_drop = delta_t * self.slew_rate
+	# 	delta_vid = abs(prep_voltage - voltage)
+	# 	return max_vid_drop > delta_vid
+
+	# 	delta_t = self.pmic_cmd_runtime + width
+	# 	max_voltage_drop = delta_t * self.slew_rate / 1000
+	# 	delta_v = abs(prep_voltage_v - voltage_v)
+	# 	return max_voltage_drop > delta_v
 
 class GlitchyMcGlitchFace:
 	s: serial.Serial = None # type: ignore

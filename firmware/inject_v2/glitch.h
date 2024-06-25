@@ -9,7 +9,7 @@
 #define TARGET_REACHABLE_US			7000 // The target sends a `R` every 3ms, if after 7ms we haven't seen it, it's dead
 #define VOLT_TEST_TIMEOUT_US		6000 // 6ms timeout to receive all bytes in a voltage test (it normally takes ~5ms)
 #define PING_VCORE_STABLE_TIME_US	350000
-#define PING_VCORE_STABLE_CHARS		110
+#define PING_VCORE_STABLE_CHARS		220
 
 typedef struct glitch_s {
 	uint32_t ext_offset;
