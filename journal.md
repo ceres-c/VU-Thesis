@@ -161,3 +161,27 @@ the ME being only half loaded or something.
 - Moved glitch success detection to target side, as it is faster (and easier to
 find the right moment to glitch)
 - Added Vp preparation voltage config
+
+## 2024-06-17
+- Some more testing
+
+## 2024-06-18
+- Looked up alternative boards for Plundervolt/Voltpillager
+
+## 2024-06-23
+- I see something interesting, sometimes the loop duration is shorter. Is the
+voltpillager-like loop with a lot of jumps a problem? Am I breaking the jump or
+the muls?
+- Unrolled the loop, it seems that loops are getting shorter but I always get
+`R` instead of `S` as I would expect when a mul is actually glitched (?)
+
+## 2024-06-24
+- Found some partial success? The board reports two different results for the
+muls, but it hangs after the first byte is sent. Try adding delays?
+
+## 2024-06-25
+- Added delay after the mul loop is done to allow the voltage to be restored
+after the glitch and before the UART peripheral is used. Maybe the CPU is
+browning out due to that beign turned on?
+- Expanded search space and just left the glitching running for a while:
+SUCCESS!

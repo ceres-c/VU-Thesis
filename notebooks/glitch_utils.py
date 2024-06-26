@@ -51,7 +51,7 @@ P_CMD_PONG					= b'\x63'	# Response to ping
 
 VOLT_TEST_MSG_COUNT			= 50		# Number of messages sent from the target during voltage test
 
-class GlitchResult(str, Enum): # str is needed to allow the enum to be a dict key (for the legend)
+class GlitchResult(str, Enum):
 	'''
 	Glitch result (processed from raw picocoder return codes)
 	'''
