@@ -107,7 +107,7 @@ def main(db_name:str, table_name: str, power_supply_port: str, glitcher_port: st
 			if read_result in [GlitchResult.RESET, GlitchResult.BROKEN, GlitchResult.HALF_SUCCESS]:
 				reset_target(ps, glitcher)
 		except KeyboardInterrupt:
-			print('\nExiting')
+			print(f'\nExiting. Total runtime: {time.time()-start:.2f}s')
 			ps.power_cycle()
 			return 0
 
