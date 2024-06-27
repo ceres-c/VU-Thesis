@@ -90,7 +90,7 @@ class GlitchController:
 		'''
 		self.groups = groups
 		self.params = {param: {'start': 0, 'end': 0, 'step': 1} for param in parameters}
-		self.results: list[tuple[GlitchSettings, GlitchResult]] = []
+		self.results: list[tuple[GlitchSettings, GlitchResult, tuple|bytes|None]] = []
 		self.fig: matplotlib.figure.Figure = None # type: ignore
 		self.ax: matplotlib.axes.Axes = None # type: ignore
 		self.xparam: str = None # type: ignore
@@ -133,15 +133,16 @@ class GlitchController:
 				ret[param] = random.randrange(values['start'], values['end'] + 1, values['step'])
 			yield ret
 
-	def add_result(self, glitch_values: GlitchSettings, result: GlitchResult):
+	def add_result(self, glitch_values: GlitchSettings, result: GlitchResult, data: tuple|bytes|None = None):
 		'''
 		Add a result to the result list, and update the plot if it is displayed
 
 		Args:
 			glitch_values: The glitch values used to achieve the result
 			result: The result of the glitch
+			data: Additional data returned by the glitcher (default: None)
 		'''
-		self.results.append((glitch_values, result))
+		self.results.append((glitch_values, result, data))
 
 		if self.ax and self.fig:
 			self.ax.plot(glitch_values[self.xparam], glitch_values[self.yparam], result, s=10)
@@ -436,7 +437,7 @@ class Picocoder:
 		data = self.s.read(4)
 		if not data:
 			raise ConnectionError('Did not get any data from picocoder after P_CMD_MEASURE_LOOP_DURATION')
-		return struct.unpack("<i", data)[0]
+		return struct.unpack('<i', data)[0]
 
 	def uart_toggle_debug_pin(self) -> None:
 		'''
@@ -493,19 +494,22 @@ class Picocoder:
 			performed = self.s.read(4)
 			if not performed:
 				raise ConnectionError('Did not receive performed iterations count from picocoder after P_CMD_RESULT_SUCCESS')
-			performed = struct.unpack("<I", performed)[0]
+			performed = struct.unpack('<I', performed)[0]
 			result_a = self.s.read(4)
 			if not result_a:
 				raise ConnectionError('Did not receive result_a from picocoder after P_CMD_RESULT_SUCCESS')
-			result_a = struct.unpack("<I", result_a)[0]
+			result_a = struct.unpack('<I', result_a)[0]
 			result_b = self.s.read(4)
 			if not result_b:
 				raise ConnectionError('Did not receive result_b from picocoder after P_CMD_RESULT_SUCCESS')
-			result_b = struct.unpack("<I", result_b)[0]
-			return GlitchResult.SUCCESS, (performed, result_a, result_b)
+			result_b = struct.unpack('<I', result_b)[0]
+			if performed == 0: # Sometimes this happens (?)
+				return GlitchResult.HALF_SUCCESS, None
+			else:
+				return GlitchResult.SUCCESS, (performed, result_a, result_b)
 		elif data == P_CMD_RESULT_DATA_TIMEOUT:
 			# Target reported a success when glitching, but did not send data back after glitch
-			return GlitchResult.HALF_SUCCESS, data
+			return GlitchResult.HALF_SUCCESS, None
 		elif data == P_CMD_RESULT_ZOMBIE:
 			# Target sent some other unexpected data
 			unexpected_data = self.s.read(1)
@@ -561,15 +565,15 @@ class Picocoder:
 			performed = self.s.read(4)
 			if not performed:
 				raise ConnectionError('Did not receive performed iterations count from picocoder after P_CMD_RESULT_SUCCESS')
-			performed = struct.unpack("<I", performed)[0]
+			performed = struct.unpack('<I', performed)[0]
 			result_a = self.s.read(4)
 			if not result_a:
 				raise ConnectionError('Did not receive result_a from picocoder after P_CMD_RESULT_SUCCESS')
-			result_a = struct.unpack("<I", result_a)[0]
+			result_a = struct.unpack('<I', result_a)[0]
 			result_b = self.s.read(4)
 			if not result_b:
 				raise ConnectionError('Did not receive result_b from picocoder after P_CMD_RESULT_SUCCESS')
-			result_b = struct.unpack("<I", result_b)[0]
+			result_b = struct.unpack('<I', result_b)[0]
 			return GlitchResult.SUCCESS, (performed, result_a, result_b)
 		elif data == P_CMD_RESULT_DATA_TIMEOUT:
 			# Target reported a success when glitching, but did not send data back after glitch
