@@ -1,8 +1,12 @@
 import random
 import struct
-from enum import Enum
-from itertools import product
 import time
+import matplotlib
+import matplotlib.axes
+import matplotlib.figure
+import matplotlib.pyplot as plt
+from enum import Enum
+from matplotlib.ticker import MaxNLocator
 from typing import Annotated, Iterator, TypedDict
 
 import serial
@@ -54,13 +58,16 @@ VOLT_TEST_MSG_COUNT			= 50		# Number of messages sent from the target during vol
 class GlitchResult(str, Enum):
 	'''
 	Glitch result (processed from raw picocoder return codes)
+	We have multiple colors and shapes here to give a fine-grained view of the results,
+	this can prove to be overwhelming with thousands of points on the plot, so it can
+	be advisable to merge some of the results into a single color/shape.
 	'''
 	RESET					= 'xr'	# Red		X
 	NORMAL					= '1b'	# Blue		Y (rotated cross)
 	WEIRD					= '<y'	# Yellow	Triangle pointing left (solid)
 	SUCCESS					= 'og'	# Green		Circle (solid)
 	HALF_SUCCESS			= '^c'	# Cyan		Triangle pointing up (solid)
-	BROKEN					= '>m'	# Magenta	Triangle pointing right (solid)
+	BROKEN					= 'Xm'	# Magenta	X (filled)
 
 class GlitchSettings(TypedDict):
 	'''
@@ -84,6 +91,10 @@ class GlitchController:
 		self.groups = groups
 		self.params = {param: {'start': 0, 'end': 0, 'step': 1} for param in parameters}
 		self.results: list[tuple[GlitchSettings, GlitchResult]] = []
+		self.fig: matplotlib.figure.Figure = None # type: ignore
+		self.ax: matplotlib.axes.Axes = None # type: ignore
+		self.xparam: str = None # type: ignore
+		self.yparam: str = None # type: ignore
 
 	def set_range(self, param: str, start: int, end: int) -> None:
 		'''
@@ -124,7 +135,7 @@ class GlitchController:
 
 	def add_result(self, glitch_values: GlitchSettings, result: GlitchResult):
 		'''
-		Add a result to the result list
+		Add a result to the result list, and update the plot if it is displayed
 
 		Args:
 			glitch_values: The glitch values used to achieve the result
@@ -132,16 +143,106 @@ class GlitchController:
 		'''
 		self.results.append((glitch_values, result))
 
-	def check_width(self, width, prep_voltage, voltage):
+		if self.ax and self.fig:
+			self.ax.plot(glitch_values[self.xparam], glitch_values[self.yparam], result, s=10)
+			self.fig.canvas.draw() # Guarantees live update of the plot whenever a new point is added
+
+	def check_width(self, width: int, prep_voltage: int, voltage: int):
 		'''
 		Checks if the width is too small to achieve the required voltage drop
 
 		Args:
-			width (int): The width to check in us
-			prep_voltage (int): The prep voltage VID (Voltage IDentifier) from PMIC datasheet
-			voltage (int): The voltage drop VID
+			width: The width to check in us
+			prep_voltage: The prep voltage VID (Voltage IDentifier) from PMIC datasheet
+			voltage: The voltage drop VID
 		'''
 		raise NotImplementedError('Use PMIC-specific glitch controller')
+
+	def draw_graph(self, xparam: str, yparam: str, integer_axis: bool = True):
+		'''
+		Draws a dynamic graph of the results
+		NOTE If used in a jupyter notebook, the plot will be displayed live only if the figure
+		is generated in a different cell than the one that adds data to the plot
+
+		Args:
+			xparam: The parameter to use as the x-axis
+			yparam: The parameter to use as the y-axis
+			integer_axis: If True, the axis ticks will be integer-only (default: True)
+		'''
+		if self.ax:
+			self.ax.clear()
+		if self.fig:
+			self.fig.clear()
+			plt.close(self.fig)
+		self.fig, self.ax = plt.subplots()
+		if integer_axis:
+			self.ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+			self.ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+		if xparam not in self.params:
+			raise ValueError(f'Parameter {xparam} not found')
+		self.xparam = xparam
+		if yparam not in self.params:
+			raise ValueError(f'Parameter {yparam} not found')
+		self.yparam = yparam
+
+	def redraw_graph(self):
+		'''
+		Redraws the graph with the current results and x/y axes settings
+		'''
+		self.fig.canvas.draw()
+
+	def draw_graph_view(self, xparam: str, yparam: str, integer_axis: bool = True) -> tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
+		'''
+		Draws another view (static) of the current results with the given x/y parameters.
+		Graphs plotted with this function are not updated when new results are added.
+
+		Args:
+			xparam: The parameter to use as the x-axis
+			yparam: The parameter to use as the y-axis
+			integer_axis: If True, the axis ticks will be integer-only (default: True)
+		'''
+
+		fig, ax = plt.subplots()
+		if integer_axis:
+			ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+			ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+		if xparam not in self.params:
+			raise ValueError(f'Parameter {xparam} not found')
+		if yparam not in self.params:
+			raise ValueError(f'Parameter {yparam} not found')
+		for glitch_values, result in self.results:
+			ax.plot(glitch_values[xparam], glitch_values[yparam], result, s=10)
+		return fig, ax
+
+	def draw_graph_view_filter(self, xparam: str, yparam: str, print_last: GlitchResult, integer_axis: bool = True):
+		'''
+		Draws another view (static) of the current results with the given x/y parameters.
+		Results of type `print_last` are printed last to highlight them when overlapped with other results.
+		Graphs plotted with this function are not updated when new results are added.
+
+		Args:
+			xparam: The parameter to use as the x-axis
+			yparam: The parameter to use as the y-axis
+			print_last: The result type to print last
+			integer_axis: If True, the axis ticks will be integer-only (default: True)
+		'''
+		fig, ax = plt.subplots()
+		if integer_axis:
+			ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+			ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+		if xparam not in self.params:
+			raise ValueError(f'Parameter {xparam} not found')
+		if yparam not in self.params:
+			raise ValueError(f'Parameter {yparam} not found')
+		delayed = set()
+		for glitch_values, result in self.results:
+			if result == print_last:
+				delayed.add((glitch_values, result))
+			else:
+				ax.plot(glitch_values[xparam], glitch_values[yparam], result)
+		for glitch_values, result in delayed:
+			ax.plot(glitch_values[xparam], glitch_values[yparam], result)
+		return fig, ax
 
 class GlitchControllerTPS65094(GlitchController):
 	'''
@@ -150,7 +251,7 @@ class GlitchControllerTPS65094(GlitchController):
 	I2C_CMD_TRANSMIT = 36 # us
 	SLEW_RATE = 3 # mV/us
 
-	def check_width(self, width, prep_voltage, voltage):
+	def check_width(self, width: int, prep_voltage: int, voltage: int):
 		# Convert VID to voltage
 		voltage_v = 0 if voltage == 0 else 0.5 + (voltage - 1) * 0.01
 		prep_voltage_v = 0 if prep_voltage == 0 else 0.5 + (prep_voltage - 1) * 0.01
@@ -274,9 +375,11 @@ class Picocoder:
 		for param, value in glitch_setting.items():
 			try:
 				getattr(self, param)
+			# Will throw AttributeError (not caught) if the property does not exist
 			except NotImplementedError:
 				# This is expected behavior with some properties, they are set-only
-				setattr(self, param, value)
+				pass
+			setattr(self, param, value)
 
 	def clear(self) -> None:
 		'''
