@@ -3,11 +3,11 @@ GLITCHER_PORT = '/dev/ttyACM1'
 GLITCHER_BAUD = 115200
 
 import glitch_utils
-from glitch_utils import GlitchyMcGlitchFace, GlitchResult
+from glitch_utils import Picocoder, GlitchResult
 from power_supply import PowerSupply, KA3305P
 import time
 
-glitcher = glitch_utils.GlitchyMcGlitchFace(GLITCHER_PORT, GLITCHER_BAUD)
+glitcher = glitch_utils.Picocoder(GLITCHER_PORT, GLITCHER_BAUD)
 if not glitcher.ping():
 	raise Exception("Glitcher not responding")
 
@@ -26,7 +26,7 @@ gc.set_range('ext_offset', 1, 10)
 gc.set_range('width', 1, 10)
 gc.set_range('voltage', 0b0110011, 0b1001011) # 1V-1.24V - See Table 6-3 in TPS65094 datasheet
 
-def reset_target(ps: PowerSupply, glitcher: GlitchyMcGlitchFace, timeout: float = 1.5) -> None:
+def reset_target(ps: PowerSupply, glitcher: Picocoder, timeout: float = 1.5) -> None:
 	ps.power_cycle()
 	if not glitcher.ping_target(timeout):
 		raise Exception("Target not responding after reset")

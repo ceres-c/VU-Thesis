@@ -3,7 +3,7 @@ import struct
 from enum import Enum
 from itertools import product
 import time
-from typing import Annotated, Iterator
+from typing import Annotated, Iterator, TypedDict
 
 import serial
 
@@ -62,6 +62,15 @@ class GlitchResult(str, Enum):
 	HALF_SUCCESS			= '^c'	# Cyan		Triangle pointing up (solid)
 	BROKEN					= '>m'	# Magenta	Triangle pointing right (solid)
 
+class GlitchSettings(TypedDict):
+	'''
+	Glitch settings
+	'''
+	ext_offset: int
+	width: int
+	voltage: int
+	prep_voltage: int
+
 class GlitchController:
 	'''
 	Glitch campaign controller. Generates glitch values and stores results
@@ -74,7 +83,7 @@ class GlitchController:
 		'''
 		self.groups = groups
 		self.params = {param: {'start': 0, 'end': 0, 'step': 1} for param in parameters}
-		self.results: list[tuple[tuple[int, ...], GlitchResult]] = []
+		self.results: list[tuple[GlitchSettings, GlitchResult]] = []
 
 	def set_range(self, param: str, start: int, end: int) -> None:
 		'''
@@ -102,26 +111,18 @@ class GlitchController:
 			raise ValueError(f'Parameter {param} not found')
 		self.params[param]['step'] = step
 
-	def rand_glitch_values_inf(self) -> Iterator[tuple[int, ...]]:
+	def rand_glitch_values(self) -> Iterator[GlitchSettings]:
 		'''
-		Generates an infinite sequence of random glitch values
+		Generates an infinite sequence of random glitch values (repetitions are possible)
 		'''
 		while True:
-			yield tuple(random.randrange(param['start'], param['end'] + 1, param['step']) for param in self.params.values())
+			ret: GlitchSettings = {} # type: ignore
+			for param in self.params:
+				values = self.params[param]
+				ret[param] = random.randrange(values['start'], values['end'] + 1, values['step'])
+			yield ret
 
-	def rand_glitch_values(self) -> Iterator[tuple[int, ...]]:
-		'''
-		Generates a finite sequence of random glitch values covering the entire parameter space exactly once
-		NOTE: Highly inefficient for large parameter spaces
-		'''
-		combinations = list(product(
-			*(range(param['start'], param['end'] + 1, param['step']) for param in self.params.values())
-		))
-		random.shuffle(combinations)
-		for combination in combinations:
-			yield combination
-
-	def add_result(self, glitch_values: tuple[int, ...], result: GlitchResult):
+	def add_result(self, glitch_values: GlitchSettings, result: GlitchResult):
 		'''
 		Add a result to the result list
 
@@ -159,7 +160,10 @@ class GlitchControllerTPS65094(GlitchController):
 		delta_v = abs(prep_voltage_v - voltage_v)
 		return max_voltage_drop > delta_v
 
-class GlitchyMcGlitchFace:
+class Picocoder:
+	'''
+	Interface with the picocode glitcher firmware
+	'''
 	s: serial.Serial = None # type: ignore
 
 	# Locally cached properties
@@ -184,7 +188,7 @@ class GlitchyMcGlitchFace:
 		'''
 		if self._ext_offset is None:
 			# TODO get from device
-			pass
+			raise NotImplementedError('No command to read this property from glitcher')
 		return self._ext_offset
 	@ext_offset.setter
 	def ext_offset(self, value: int):
@@ -206,7 +210,7 @@ class GlitchyMcGlitchFace:
 		'''
 		if self._width is None:
 			# TODO get from device
-			pass
+			raise NotImplementedError('No command to read this property from glitcher')
 		return self._width
 	@width.setter
 	def width(self, value: int):
@@ -228,7 +232,7 @@ class GlitchyMcGlitchFace:
 		'''
 		if self._voltage is None:
 			# TODO get from device
-			raise NotImplementedError
+			raise NotImplementedError('No command to read this property from glitcher')
 		return self._voltage
 	@target_voltage.setter
 	def voltage(self, value: int):
@@ -251,7 +255,7 @@ class GlitchyMcGlitchFace:
 		'''
 		if self._prep_voltage is None:
 			# TODO get from device
-			raise NotImplementedError
+			raise NotImplementedError('No command to read this property from glitcher')
 		return self._prep_voltage
 	@prep_voltage.setter
 	def prep_voltage(self, value: int):
@@ -265,6 +269,14 @@ class GlitchyMcGlitchFace:
 			raise ConnectionError('Could not set preparation voltage: no response')
 		if ret != P_CMD_RETURN_OK:
 			raise ValueError(f'Could not set preparation voltage. Received: 0x{ret.hex()}')
+
+	def _apply_settings(self, glitch_setting: GlitchSettings) -> None:
+		for param, value in glitch_setting.items():
+			try:
+				getattr(self, param)
+			except NotImplementedError:
+				# This is expected behavior with some properties, they are set-only
+				setattr(self, param, value)
 
 	def clear(self) -> None:
 		'''
@@ -336,7 +348,7 @@ class GlitchyMcGlitchFace:
 		if not bool(data):
 			raise ValueError(f'Could not toggle debug pin. Received: 0x{data.hex()}')
 
-	def glitch_mul(self, glitch_setting: Annotated[tuple[int], 3]) -> tuple[GlitchResult, tuple|bytes|None]:
+	def glitch_mul(self, glitch_setting: GlitchSettings) -> tuple[GlitchResult, tuple|bytes|None]:
 		'''
 		Perform a glitch on `mul` with the given settings.
 		When a successful glitch is performed, the function returns a tuple with:
@@ -352,7 +364,7 @@ class GlitchyMcGlitchFace:
 				raise ConnectionError('Could not connect to picocoder')
 			self._connected = ping
 
-		[self.ext_offset, self.width, self.voltage] = [*glitch_setting]
+		self._apply_settings(glitch_setting)
 
 		self.s.reset_input_buffer() # Clear any pending data, just in case
 		self.s.write(P_CMD_ARM)
