@@ -185,3 +185,7 @@ after the glitch and before the UART peripheral is used. Maybe the CPU is
 browning out due to that beign turned on?
 - Expanded search space and just left the glitching running for a while:
 SUCCESS!
+
+## 2024-06-27
+- Improved python code for readabilty
+- Wrote headless code for data collection

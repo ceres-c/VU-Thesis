@@ -211,8 +211,8 @@ class GlitchController:
 			raise ValueError(f'Parameter {xparam} not found')
 		if yparam not in self.params:
 			raise ValueError(f'Parameter {yparam} not found')
-		for glitch_values, result in self.results:
-			ax.plot(glitch_values[xparam], glitch_values[yparam], result, s=10)
+		for glitch_values, result, _ in self.results:
+			ax.plot(glitch_values[xparam], glitch_values[yparam], result)
 		return fig, ax
 
 	def draw_graph_view_filter(self, xparam: str, yparam: str, print_last: GlitchResult, integer_axis: bool = True):
@@ -236,7 +236,7 @@ class GlitchController:
 		if yparam not in self.params:
 			raise ValueError(f'Parameter {yparam} not found')
 		delayed = set()
-		for glitch_values, result in self.results:
+		for glitch_values, result, _ in self.results:
 			if result == print_last:
 				delayed.add((glitch_values, result))
 			else:
