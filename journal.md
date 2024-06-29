@@ -189,3 +189,13 @@ SUCCESS!
 ## 2024-06-27
 - Improved python code for readabilty
 - Wrote headless code for data collection
+- It seems that both `imul 0x80000, 0x4` and `imul 0x4, 0x80000` can be
+glitched, but Plundervolt's paper mentions they never had success with the
+latter. Weird?
+
+## 2024-06-28
+- Seems like on my CPU, FIT installs the updated ucode on all cores. On some
+other CPUs, it only installs it on the BSP (Boot Strap Processor). This might
+be interesting for software-based attacks on those CPUs (?)
+Source: https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/best-practices/microcode-update-guidance.html#inpage-nav-undefined-undefined
+

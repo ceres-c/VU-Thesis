@@ -12,11 +12,22 @@ from power_supply import PowerSupply, KA3305P
 GLITCHER_BAUD = 115200
 
 class GlitchSQLite():
-	def __init__(self, db_name: str, table_name: str):
-		self.db_name = db_name
-		self.table_name = table_name
-		self.conn = sqlite3.connect(db_name)
-		self.c = self.conn.cursor()
+	def __init__(self, db_name: str, table_name: str, settings: str, extra: str):
+		'''
+		Args:
+			db_name (str): Database filename
+			table_name (str): Table name (some name that identifies this glitch campaign)
+			settings (str): Settings string (e.g. `ext_offset=100:300(1),width=75:125(1),voltage=35:36(1),prep_voltage=42(1)`)
+			extra (str): Extra string that helps in identifying the experiment (e.g. target software commit hash)
+		'''
+		self.db_name: str = db_name
+		self.table_name: str = table_name
+		self.settings: str = settings
+		self.extra: str = extra
+		self.conn: sqlite3.Connection = sqlite3.connect(db_name)
+		self.c: sqlite3.Cursor = self.conn.cursor()
+		if not self.has_table('settings'):
+			self.c.execute('CREATE TABLE settings (table_name TEXT PRIMARY KEY, settings TEXT, extra TEXT)')
 
 	def __del__(self):
 		self.close()
@@ -31,8 +42,32 @@ class GlitchSQLite():
 		self.c.execute(f'SELECT name FROM sqlite_master WHERE type="table" AND name="{table_name if table_name else self.table_name}"')
 		return self.c.fetchone() is not None
 
+	def get_settings(self, table_name: str = '') -> tuple[str, str]:
+		'''
+		Get settings and extra associated with a table name
+
+		Args:
+			table_name (str): Table name to get settings from. If empty, it will get settings from the default table name
+
+		Returns:
+			(str, str): settings, extra
+		'''
+		self.c.execute(f'SELECT settings, extra FROM settings WHERE table_name="{table_name if table_name else self.table_name}"')
+		return self.c.fetchone()
+
+	def count_rows(self, table_name: str = '') -> int:
+		'''
+		Count the number of rows in a table
+
+		Args:
+			table_name (str): Table name to count rows from. If empty, it will count rows from the default table name
+		'''
+		self.c.execute(f'SELECT COUNT(*) FROM {table_name if table_name else self.table_name}')
+		return self.c.fetchone()[0]
+
 	def create_table(self) -> None:
 		self.c.execute(f'CREATE TABLE {self.table_name} (ext_offset INTEGER, width INTEGER, voltage INTEGER, prep_voltage INTEGER, result STRING, data BLOB, successes INTEGER, result_a INTEGER, result_b INTEGER)')
+		self.c.execute('INSERT INTO settings VALUES (?, ?, ?)', (self.table_name, self.settings, self.extra))
 		self.conn.commit()
 
 	def insert_result(self,
@@ -52,15 +87,46 @@ class GlitchSQLite():
 
 
 
-def reset_target(ps: PowerSupply, glitcher: Picocoder) -> None:
-	ps.power_cycle()
-	if not glitcher.ping_target():
+def reset_target(ps: PowerSupply, glitcher: Picocoder, retries: int = 3) -> None:
+	for _ in range(retries):
+		ps.power_cycle()
+		if glitcher.ping_target():
+			break
+	else:
 		raise ConnectionError('Target not responding after reset')
 
-def main(db_name:str, table_name: str, power_supply_port: str, glitcher_port: str, ext_offset: list, width: list, voltage: list, prep_voltage: list) -> int:
-	db = GlitchSQLite(db_name, table_name)
+def settings_to_str(ext_offset: list, width: list, voltage: list, prep_voltage: list) -> str:
+	ret = 'ext_offset'
+	if ext_offset[0] == ext_offset[1]:
+		ret += f'={ext_offset[0]}'
+	else:
+		ret += f'={ext_offset[0]}:{ext_offset[1]}'
+		ret += f'({ext_offset[2]})'
+	ret += ',width'
+	if width[0] == width[1]:
+		ret += f'={width[0]}'
+	else:
+		ret += f'={width[0]}:{width[1]}'
+		ret += f'({width[2]})'
+	ret += ',voltage'
+	if voltage[0] == voltage[1]:
+		ret += f'={voltage[0]}'
+	else:
+		ret += f'={voltage[0]}:{voltage[1]}'
+		ret += f'({voltage[2]})'
+	ret += ',prep_voltage'
+	if prep_voltage[0] == prep_voltage[1]:
+		ret += f'={prep_voltage[0]}'
+	else:
+		ret += f'={prep_voltage[0]}:{prep_voltage[1]}'
+		ret += f'({prep_voltage[2]})'
+	return ret
+
+def main(db_name:str, db_table_name: str, extra_descr: str, power_supply_port: str, glitcher_port: str, ext_offset: list, width: list, voltage: list, prep_voltage: list) -> int:
+	db = GlitchSQLite(db_name, db_table_name, settings_to_str(ext_offset, width, voltage, prep_voltage), extra_descr)
 	if db.has_table():
-		resp = input(f'Table {table_name} already exists in {db_name}. Append to it? [Y/n] ')
+		count = db.count_rows()
+		resp = input(f'Table {db_table_name} already exists in {db_name} with {count} rows. Append to it? [Y/n] ')
 		if resp.lower() != 'y' and resp.lower() != '':
 			return 1
 	else:
@@ -105,7 +171,13 @@ def main(db_name:str, table_name: str, power_supply_port: str, glitcher_port: st
 				db.insert_result(gs['ext_offset'], gs['width'], gs['voltage'], gs['prep_voltage'], read_result.name, data=read_data)
 
 			if read_result in [GlitchResult.RESET, GlitchResult.BROKEN, GlitchResult.HALF_SUCCESS]:
-				reset_target(ps, glitcher)
+				try:
+					reset_target(ps, glitcher)
+				except ConnectionError:
+					print('Failed to reset target, shutting down')
+					ps.on = False
+					return 1
+
 		except KeyboardInterrupt:
 			print(f'\nExiting. Total runtime: {time.time()-start:.2f}s')
 			ps.power_cycle()
@@ -121,6 +193,7 @@ if __name__ == '__main__':
 	argparser.add_argument('--width', nargs=3, type=int, metavar=('start', 'end', 'step'), help='Width range', required=True)
 	argparser.add_argument('--voltage', nargs=3, type=int, metavar=('start', 'end', 'step'), help='Glitch voltage range', required=True)
 	argparser.add_argument('--prep-voltage', default=[0b0101010,0b0101010,1], nargs=3, type=int, metavar=('start', 'end', 'step'), help='Preparation voltage (default 0b0101010 = 0.91V)')
+	argparser.add_argument('--extra-descr', default='', type=str, help='Description of the glitch campaign (e.g. target software commit hash)')
 	args = argparser.parse_args()
 
-	exit(main(args.db_file, args.db_table, args.power_supply, args.glitcher, args.ext_offset, args.width, args.voltage, args.prep_voltage))
+	exit(main(args.db_file, args.db_table, args.extra_descr, args.power_supply, args.glitcher, args.ext_offset, args.width, args.voltage, args.prep_voltage))
