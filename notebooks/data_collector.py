@@ -148,7 +148,7 @@ def main(db_name:str, db_table_name: str, extra_descr: str, power_supply_port: s
 	if ext_offset[2] + width[2] > max_total_duration:
 		raise ValueError(f'Max ext_offset + max width > max_total_duration: ({ext_offset[2]} + {width[2]} > {max_total_duration})')
 
-	gc = glitch_utils.GlitchControllerTPS65094(groups=[r.name for r in GlitchResult], parameters=['ext_offset', 'width', 'voltage', 'prep_voltage'])
+	gc = glitch_utils.GlitchControllerTPS65094(groups=[r.name for r in GlitchResult], parameters=['ext_offset', 'width', 'voltage', 'prep_voltage'], nominal_voltage=1.24)
 	gc.set_range('ext_offset', ext_offset[0], ext_offset[1])
 	gc.set_step('ext_offset', ext_offset[2])
 	gc.set_range('width', width[0], width[1])

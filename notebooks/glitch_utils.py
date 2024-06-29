@@ -1,3 +1,4 @@
+from math import ceil
 import random
 import struct
 import time
@@ -82,14 +83,16 @@ class GlitchController:
 	'''
 	Glitch campaign controller. Generates glitch values and stores results
 	'''
-	def __init__(self, groups: list[str], parameters: list[str]):
+	def __init__(self, groups: list[str], parameters: list[str], nominal_voltage: float):
 		'''
 		Args:
 			groups: List of result groups (the possible result values)
 			parameters: List of parameters that the glitch controller will generate (the glitch search space)
+			nominal_voltage: Nominal voltage of the target (in V)
 		'''
 		self.groups = groups
 		self.params = {param: {'start': 0, 'end': 0, 'step': 1} for param in parameters}
+		self.nominal_voltage = nominal_voltage
 		self.results: list[tuple[GlitchSettings, GlitchResult, tuple|bytes|None]] = []
 		self.fig: matplotlib.figure.Figure = None # type: ignore
 		self.ax: matplotlib.axes.Axes = None # type: ignore
@@ -126,11 +129,22 @@ class GlitchController:
 		'''
 		Generates an infinite sequence of random glitch values (repetitions are possible)
 		'''
+		generated = 0
+		valid = 0
+		warned = False
+		total = sum(ceil((self.params[param]['end'] - self.params[param]['start']) / self.params[param]['step'] + 1) for param in self.params)
 		while True:
 			ret: GlitchSettings = {} # type: ignore
 			for param in self.params:
 				values = self.params[param]
 				ret[param] = random.randrange(values['start'], values['end'] + 1, values['step'])
+			generated += 1
+			if self.check_width(ret):
+				valid += 1
+			rate = valid / generated
+			if not warned and generated > total * 0.1 and rate < 0.8:
+				warned = True
+				print(f'Warning: so far only {valid}/{generated} ({rate*100:.2f}%) of generated settings can be achieved by the PMIC. Check your settings')
 			yield ret
 
 	def add_result(self, glitch_values: GlitchSettings, result: GlitchResult, data: tuple|bytes|None = None):
@@ -145,17 +159,15 @@ class GlitchController:
 		self.results.append((glitch_values, result, data))
 
 		if self.ax and self.fig:
-			self.ax.plot(glitch_values[self.xparam], glitch_values[self.yparam], result, s=10)
+			self.ax.plot(glitch_values[self.xparam], glitch_values[self.yparam], result)
 			self.fig.canvas.draw() # Guarantees live update of the plot whenever a new point is added
 
-	def check_width(self, width: int, prep_voltage: int, voltage: int):
+	def check_width(self, gs: GlitchSettings) -> bool:
 		'''
 		Checks if the width is too small to achieve the required voltage drop
 
 		Args:
-			width: The width to check in us
-			prep_voltage: The prep voltage VID (Voltage IDentifier) from PMIC datasheet
-			voltage: The voltage drop VID
+			gs: Glitch settings
 		'''
 		raise NotImplementedError('Use PMIC-specific glitch controller')
 
@@ -252,15 +264,26 @@ class GlitchControllerTPS65094(GlitchController):
 	I2C_CMD_TRANSMIT = 36 # us
 	SLEW_RATE = 3 # mV/us
 
-	def check_width(self, width: int, prep_voltage: int, voltage: int):
-		# Convert VID to voltage
-		voltage_v = 0 if voltage == 0 else 0.5 + (voltage - 1) * 0.01
-		prep_voltage_v = 0 if prep_voltage == 0 else 0.5 + (prep_voltage - 1) * 0.01
+	def check_width(self, gs: GlitchSettings) -> bool:
+		'''
+		Checks if ext_offset and width are too small to achieve the required voltage drop
 
-		delta_t = self.I2C_CMD_TRANSMIT + width
-		max_voltage_drop = delta_t * self.SLEW_RATE / 1000
-		delta_v = abs(prep_voltage_v - voltage_v)
-		return max_voltage_drop > delta_v
+		Args:
+			gs: Glitch settings
+		'''
+		# Convert VID to voltage
+		prep_voltage_v = 0 if gs['prep_voltage'] == 0 else 0.5 + (gs['prep_voltage'] - 1) * 0.01
+		voltage_v = 0 if gs['voltage'] == 0 else 0.5 + (gs['voltage'] - 1) * 0.01
+
+		delta_t_prep = self.I2C_CMD_TRANSMIT + gs['ext_offset']
+		max_voltage_drop_prep = delta_t_prep * self.SLEW_RATE / 1000
+		delta_v_prep = abs(self.nominal_voltage - prep_voltage_v)
+
+		delta_t_glitch = self.I2C_CMD_TRANSMIT + gs['width']
+		max_voltage_drop_glitch = delta_t_glitch * self.SLEW_RATE / 1000
+		delta_v_glitch = abs(prep_voltage_v - voltage_v)
+
+		return max_voltage_drop_prep > delta_v_prep and max_voltage_drop_glitch > delta_v_glitch
 
 class Picocoder:
 	'''
