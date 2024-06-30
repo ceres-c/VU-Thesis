@@ -199,3 +199,18 @@ other CPUs, it only installs it on the BSP (Boot Strap Processor). This might
 be interesting for software-based attacks on those CPUs (?)
 Source: https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/best-practices/microcode-update-guidance.html#inpage-nav-undefined-undefined
 
+## 2024-06-29
+- Alvise probably found the reason for half success: at that stage coreboot has
+not fully populated the IDT, thus when an exception is thrown it just hangs.
+Probably when I get a half success the CPU is just in some weird state that
+will eventually throw an exception down the line due to some corrupt stack
+write or something.
+- Well, it turns out that if I run on the target code that only relies on
+registers instead of stack, I don't get *any* glitch. (:
+I suppose I was glitching some memory access before? Not muls.
+
+## 2024-06-30
+- Collecting data points for stackless code. Some weak half success somewhere
+with small width, idk.
+- Improved db plotter with separate plots for different aspects (one set for
+each voltage...)

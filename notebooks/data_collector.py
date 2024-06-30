@@ -161,7 +161,7 @@ def main(db_name:str, db_table_name: str, extra_descr: str, power_supply_port: s
 	start = time.time()
 	for i, gs in enumerate(gc.rand_glitch_values()):
 		if i % 5 == 0:
-			print(f'Iteration {i}, rate {i/(time.time()-start):.2f}Hz', end='\r', flush=True)
+			print(f'Iteration {i}, rate {i/(time.time()-start):.2f}Hz         ', end='\r', flush=True) # spaces to overwrite prev line
 		try:
 			read_result, read_data = glitcher.glitch_mul(gs)
 			if read_result == GlitchResult.SUCCESS:
