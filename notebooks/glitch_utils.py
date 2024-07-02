@@ -1,4 +1,4 @@
-from math import ceil
+from math import ceil, prod
 import random
 import struct
 import time
@@ -127,24 +127,21 @@ class GlitchController:
 
 	def rand_glitch_values(self) -> Iterator[GlitchSettings]:
 		'''
-		Generates an infinite sequence of random glitch values (repetitions are possible)
+		Generates an infinite sequence of random glitch values (repetitions are possible).
+
+		It also checks if the current settings can achieve the required voltage drops and raises
+		an error if they cannot.
 		'''
-		generated = 0
-		valid = 0
-		warned = False
-		total = sum(ceil((self.params[param]['end'] - self.params[param]['start']) / self.params[param]['step'] + 1) for param in self.params)
+		can_prep_voltage = self.check_prep_voltage()
+		can_voltage = self.check_voltage()
+		if not all([can_prep_voltage, can_voltage]):
+			raise ValueError('The current settings cannot achieve the required voltage drops')
+
 		while True:
 			ret: GlitchSettings = {} # type: ignore
 			for param in self.params:
 				values = self.params[param]
 				ret[param] = random.randrange(values['start'], values['end'] + 1, values['step'])
-			generated += 1
-			if self.check_width(ret):
-				valid += 1
-			rate = valid / generated
-			if not warned and generated > total * 0.1 and rate < 0.8:
-				warned = True
-				print(f'Warning: so far only {valid}/{generated} ({rate*100:.2f}%) of generated settings can be achieved by the PMIC. Check your settings')
 			yield ret
 
 	def add_result(self, glitch_values: GlitchSettings, result: GlitchResult, data: tuple|bytes|None = None):
@@ -162,9 +159,32 @@ class GlitchController:
 			self.ax.plot(glitch_values[self.xparam], glitch_values[self.yparam], result)
 			self.fig.canvas.draw() # Guarantees live update of the plot whenever a new point is added
 
-	def check_width(self, gs: GlitchSettings) -> bool:
+	def check_prep_voltage(self) -> bool:
 		'''
-		Checks if the width is too small to achieve the required voltage drop
+		Checks if the configured preparation voltage range can be achieved with the
+		configured external offset.
+		Will print warnings if values are out of range
+
+		Returns:
+		False if the maximum required preparation voltage cannot be reached within the maximum ext_offset
+		'''
+		raise NotImplementedError('Use PMIC-specific glitch controller')
+
+	def check_voltage(self) -> bool:
+		'''
+		Checks if the voltage is too small to achieve the required voltage drop with the
+		configured width.
+		Will print warnings if values are out of range.
+
+		Returns:
+		False if the maximum required voltage cannot be reached within the maximum width
+		'''
+		raise NotImplementedError('Use PMIC-specific glitch controller')
+
+	def check_settings(self, gs: GlitchSettings) -> bool:
+		'''
+		Checks if some specific settings can achieve the required voltage drops, both
+		Vcc -> Vp and Vp -> Vf
 
 		Args:
 			gs: Glitch settings
@@ -264,13 +284,47 @@ class GlitchControllerTPS65094(GlitchController):
 	I2C_CMD_TRANSMIT = 36 # us
 	SLEW_RATE = 3 # mV/us
 
-	def check_width(self, gs: GlitchSettings) -> bool:
-		'''
-		Checks if ext_offset and width are too small to achieve the required voltage drop
+	def check_prep_voltage(self) -> bool:
+		# Convert VID to millivolts
+		prep_voltage_min = min(self.params['prep_voltage']['start'], self.params['prep_voltage']['end'])
+		prep_voltage_min_mv = 0 if prep_voltage_min == 0 else 500 + (prep_voltage_min - 1) * 10
 
-		Args:
-			gs: Glitch settings
-		'''
+		ext_offset_min = min(self.params['ext_offset']['start'], self.params['ext_offset']['end'])
+		ext_offset_max = max(self.params['ext_offset']['start'], self.params['ext_offset']['end'])
+
+		max_delta_prep_voltage = abs(prep_voltage_min_mv - self.nominal_voltage * 1000)
+		required_time_voltage_prep = ceil(max_delta_prep_voltage / self.SLEW_RATE - 2*self.I2C_CMD_TRANSMIT) # Time in integer us
+
+		can_prep_min = required_time_voltage_prep <= ext_offset_min
+		can_prep_max = required_time_voltage_prep <= ext_offset_max
+		if not can_prep_max:
+			print(f'Warning: The minimum target of Vp={prep_voltage_min_mv}mV (delta {max_delta_prep_voltage}mV) cannot be achieved within the maximum ext_offset={ext_offset_max}us. Required ext_offset >= {required_time_voltage_prep}us')
+		elif not can_prep_min:
+			print(f'Warning: The minimum target of Vp={prep_voltage_min_mv}mV (delta {max_delta_prep_voltage}mV) cannot be achieved within the minimum ext_offset={ext_offset_min}us. Required ext_offset >= {required_time_voltage_prep}us')
+		return can_prep_max
+
+	def check_voltage(self) -> bool:
+		# Convert VID to voltage
+		voltage_min = min(self.params['voltage']['start'], self.params['voltage']['end'])
+		voltage_min_mv = 0 if voltage_min == 0 else 500 + (voltage_min - 1) * 10
+		prep_voltage_max = max(self.params['prep_voltage']['start'], self.params['prep_voltage']['end'])
+		prep_voltage_max_mv = 0 if prep_voltage_max == 0 else 500 + (prep_voltage_max - 1) * 10
+
+		width_min = min(self.params['width']['start'], self.params['width']['end'])
+		width_max = max(self.params['width']['start'], self.params['width']['end'])
+
+		max_delta_voltage = abs(voltage_min_mv - prep_voltage_max_mv)
+		required_time_voltage = ceil(max_delta_voltage / self.SLEW_RATE - 2*self.I2C_CMD_TRANSMIT) # Time in integer us
+
+		can_voltage_min = required_time_voltage <= width_min
+		can_voltage_max = required_time_voltage <= width_max
+		if not can_voltage_max:
+			print(f'Warning: The minimum target of Vf={voltage_min_mv}mV (delta {max_delta_voltage}mV) cannot be achieved within the maximum width={width_max}us. Required width >= {required_time_voltage}us')
+		elif not can_voltage_min:
+			print(f'Warning: The minimum target of Vf={voltage_min_mv}mV (delta {max_delta_voltage}mV) cannot be achieved within the minimum width={width_min}us. Required width >= {required_time_voltage}us')
+		return can_voltage_max
+
+	def check_settings(self, gs: GlitchSettings) -> bool:
 		# Convert VID to voltage
 		prep_voltage_v = 0 if gs['prep_voltage'] == 0 else 0.5 + (gs['prep_voltage'] - 1) * 0.01
 		voltage_v = 0 if gs['voltage'] == 0 else 0.5 + (gs['voltage'] - 1) * 0.01

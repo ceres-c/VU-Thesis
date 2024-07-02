@@ -122,7 +122,19 @@ def settings_to_str(ext_offset: list, width: list, voltage: list, prep_voltage: 
 		ret += f'({prep_voltage[2]})'
 	return ret
 
-def main(db_name:str, db_table_name: str, extra_descr: str, power_supply_port: str, glitcher_port: str, ext_offset: list, width: list, voltage: list, prep_voltage: list) -> int:
+def main(
+		db_name:str,
+		db_table_name: str,
+		extra_descr: str,
+		power_supply_port: str,
+		glitcher_port: str,
+		ext_offset: list,
+		width: list,
+		voltage: list,
+		prep_voltage: list,
+		stop_half_success: bool = False,
+		stop_success: bool = False
+	) -> int:
 	db = GlitchSQLite(db_name, db_table_name, settings_to_str(ext_offset, width, voltage, prep_voltage), extra_descr)
 	if db.has_table():
 		count = db.count_rows()
@@ -170,6 +182,13 @@ def main(db_name:str, db_table_name: str, extra_descr: str, power_supply_port: s
 			else:
 				db.insert_result(gs['ext_offset'], gs['width'], gs['voltage'], gs['prep_voltage'], read_result.name, data=read_data)
 
+			if stop_half_success and read_result == GlitchResult.HALF_SUCCESS:
+				print('Half-success detected, stopping. Target is left in its current state')
+				break
+			if stop_success and read_result == GlitchResult.SUCCESS:
+				print('Success detected, stopping. Target is left in its current state')
+				break
+
 			if read_result in [GlitchResult.RESET, GlitchResult.BROKEN, GlitchResult.HALF_SUCCESS]:
 				try:
 					reset_target(ps, glitcher)
@@ -181,7 +200,8 @@ def main(db_name:str, db_table_name: str, extra_descr: str, power_supply_port: s
 		except KeyboardInterrupt:
 			print(f'\nExiting. Total runtime: {time.time()-start:.2f}s')
 			ps.power_cycle()
-			return 0
+			break
+	return 0
 
 if __name__ == '__main__':
 	argparser = ArgumentParser(description='Simple script to run a glitch campaign and save results to a database')
@@ -194,6 +214,8 @@ if __name__ == '__main__':
 	argparser.add_argument('--voltage', nargs=3, type=int, metavar=('start', 'end', 'step'), help='Glitch voltage range', required=True)
 	argparser.add_argument('--prep-voltage', default=[0b0101010,0b0101010,1], nargs=3, type=int, metavar=('start', 'end', 'step'), help='Preparation voltage (default 0b0101010 = 0.91V)')
 	argparser.add_argument('--extra-descr', default='', type=str, help='Description of the glitch campaign (e.g. target software commit hash)')
+	argparser.add_argument('-s', '--stop-half-success', default=False, action='store_true', help='Stop the glitch campaign if a half-success is detected')
+	argparser.add_argument('-S', '--stop-success', default=False, action='store_true', help='Stop the glitch campaign if a success is detected')
 	args = argparser.parse_args()
 
-	exit(main(args.db_file, args.db_table, args.extra_descr, args.power_supply, args.glitcher, args.ext_offset, args.width, args.voltage, args.prep_voltage))
+	exit(main(args.db_file, args.db_table, args.extra_descr, args.power_supply, args.glitcher, args.ext_offset, args.width, args.voltage, args.prep_voltage, args.stop_half_success, args.stop_success))

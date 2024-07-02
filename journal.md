@@ -214,3 +214,39 @@ I suppose I was glitching some memory access before? Not muls.
 with small width, idk.
 - Improved db plotter with separate plots for different aspects (one set for
 each voltage...)
+- Improved python control code to check if settings can actually be achieved
+by PMIC (due to low slew rate). It prints/raise exceptions if settings are not
+feasible.
+
+## 2024-07-01
+- Tested wider Vp and Vf ranges with stackless code, no success. I estimated
+Vp setting Vf to 1.24V (nominal VCore), and lowering Vp alone. The target is
+stable up to VID 35, below that I get glitches. I then used Vp in the range
+[30:35] and Vf in the range [1.24:1.28] and got no glitches. I then used Vp in
+[20:35], but no dice.
+- Started to read into Intel Firmware Support Package (FSP) to validate which
+caches are available and used as RAM.
+	- Verified this CPU uses FSP v2.0.
+		Source: Apollolake Intel(R) Firmware Support Package (FSP) Integration Guide $ 3
+		Source: coreboot/src/soc/intel/apollolake/Kconfig - PLATFORM_USES_FSP_2_0
+	- romstage boots from
+		- src/cpu/x86/entry32.S
+		- src/soc/intel/common/block/cpu/car/cache_as_ram.S
+	- In cache_as_ram.S, it configures CAR to use L2 cache as RAM because it
+	checks the cache ram size, and it is defined to be 768 KB in
+	src/soc/intel/apollolake/Kconfig
+	L1d cache is 24KB, L1i cache is 32KB, L2 cache is 2 MB (source: Intel Atom
+	Processor C3000 Product Family Datasheet), so the only cache that can be
+	in use as RAM is the L2 cache.
+
+## 2024-07-02
+- CAR area is configured as Write Back (WB) cacheable and non evictable
+	- src/soc/intel/common/block/cpu/car/cache_as_ram.S
+- INTEL_CAR_CQOS is enabled, which enables Cache Quality of Service (CQoS) to
+"allows more fine-grained control of cache usage. As result, it is possible to
+set up a portion of L2 cache for CAR and use the remainder for actual caching."
+Source: Coreboot kconfig option description
+	- CQOS mode also disables L1 and L2 prefetchers on line 376
+	- OR DOES IT? It is then enabled again at 440
+- After CAR is enabled, it jumps to `car_init_done` and finally
+`bootblock_c_entry`.
