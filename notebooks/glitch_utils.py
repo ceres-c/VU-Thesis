@@ -12,13 +12,8 @@ from typing import Annotated, Iterator, TypedDict
 
 import serial
 
-P_CMD_ARM					= b'\x20'
-P_CMD_DISARM				= b'\x21'
-P_CMD_SET_EXT_OFFST			= b'\x22'
-P_CMD_SET_WIDTH				= b'\x23'
-
-P_CMD_ARM					= b'\x20'	# Enable glitch handler
-P_CMD_DISARM				= b'\x21'	# Disable glitch handler
+P_CMD_ARM_MUL				= b'\x20'	# Enable glitch handler for mul
+P_CMD_ARM_LOAD				= b'\x21'	# Enable glitch handler for mov <reg> <stack>
 P_CMD_FORCE					= b'\x22'	# Force write to PMBus to perform a glitch
 P_CMD_SET_VOLTAGE			= b'\x23'	# Set glitch voltage
 P_CMD_SET_EXT_OFFST			= b'\x24'	# Set external offset (wait after trig.) in us
@@ -533,7 +528,7 @@ class Picocoder:
 		'''
 		Perform a glitch on `mul` with the given settings.
 		When a successful glitch is performed, the function returns a tuple with:
-			- the number of performed iterations
+			- the number of successful glitches
 			- result_a
 			- result_b
 		where result_a and result_b are the two multiplication values
@@ -548,7 +543,7 @@ class Picocoder:
 		self._apply_settings(glitch_setting)
 
 		self.s.reset_input_buffer() # Clear any pending data, just in case
-		self.s.write(P_CMD_ARM)
+		self.s.write(P_CMD_ARM_MUL)
 
 		data = self.s.read(1)
 		if not data:
@@ -596,18 +591,12 @@ class Picocoder:
 		else:
 			return GlitchResult.WEIRD, data
 
-
-	def mul_test_vp(self, glitch_setting: Annotated[tuple[int], 2]) -> tuple[GlitchResult, tuple|bytes|None]:
+	def glitch_load(self, glitch_setting: GlitchSettings) -> tuple[GlitchResult, tuple|bytes|None]:
 		'''
-		Perform a glitch on `mul` with the given settings.
-		When a successful glitch is performed, the function returns a tuple with:
-			- the number of successful glitches in the current loop
-			- result_a
-			- result_b
-		where result_a and result_b are the two multiplication values
-
-		Args:
-			glitch_setting: Glitch settings to use. Tuple of (ext_offset, prep_voltage)
+		Perform a glitch on `mov <reg> <stack>` with the given settings.
+		When a successful glitch is performed, the function returns a tuple with
+			- the number of successful glitches
+			- the last wrongly loaded uint32_t value
 		'''
 
 		if not self._connected:
@@ -616,10 +605,10 @@ class Picocoder:
 				raise ConnectionError('Could not connect to picocoder')
 			self._connected = ping
 
-		[self.ext_offset, self.prep_voltage] = [*glitch_setting]
+		self._apply_settings(glitch_setting)
 
-		self.s.reset_input_buffer() # Clear any pending data, just in case
-		self.s.write(P_CMD_ARM)
+		self.s.reset_input_buffer()
+		self.s.write(P_CMD_ARM_LOAD)
 
 		data = self.s.read(1)
 		if not data:
@@ -639,22 +628,18 @@ class Picocoder:
 			return GlitchResult.NORMAL, None
 		elif data == P_CMD_RESULT_SUCCESS:
 			# Glitch worked
-			performed = self.s.read(4)
-			if not performed:
-				raise ConnectionError('Did not receive performed iterations count from picocoder after P_CMD_RESULT_SUCCESS')
-			performed = struct.unpack('<I', performed)[0]
-			result_a = self.s.read(4)
-			if not result_a:
-				raise ConnectionError('Did not receive result_a from picocoder after P_CMD_RESULT_SUCCESS')
-			result_a = struct.unpack('<I', result_a)[0]
-			result_b = self.s.read(4)
-			if not result_b:
-				raise ConnectionError('Did not receive result_b from picocoder after P_CMD_RESULT_SUCCESS')
-			result_b = struct.unpack('<I', result_b)[0]
-			return GlitchResult.SUCCESS, (performed, result_a, result_b)
+			successes = self.s.read(4)
+			if not successes:
+				raise ConnectionError('Did not receive succesful glitches count from picocoder after P_CMD_RESULT_SUCCESS')
+			successes = struct.unpack('<I', successes)[0]
+			wrong_value = self.s.read(4)
+			if not wrong_value:
+				raise ConnectionError('Did not receive wrong value from picocoder after P_CMD_RESULT_SUCCESS')
+			wrong_value = struct.unpack('<I', wrong_value)[0]
+			return GlitchResult.SUCCESS, (successes, wrong_value)
 		elif data == P_CMD_RESULT_DATA_TIMEOUT:
 			# Target reported a success when glitching, but did not send data back after glitch
-			return GlitchResult.HALF_SUCCESS, data
+			return GlitchResult.HALF_SUCCESS, None
 		elif data == P_CMD_RESULT_ZOMBIE:
 			# Target sent some other unexpected data
 			unexpected_data = self.s.read(1)

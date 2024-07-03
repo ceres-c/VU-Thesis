@@ -120,8 +120,11 @@ void process(pio_spi_inst_t *spi, int command) {
 			getchar();
 			putchar(S_ACK);
 			break;
-		case P_CMD_ARM:
-			glitcher_arm();
+		case P_CMD_ARM_MUL:
+			glitcher_arm_mul();
+			break;
+		case P_CMD_ARM_LOAD:
+			glitcher_arm_load();
 			break;
 		case P_CMD_FORCE:
 			busy_wait_us_32(glitch.ext_offset);

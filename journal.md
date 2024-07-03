@@ -250,3 +250,16 @@ Source: Coreboot kconfig option description
 	- OR DOES IT? It is then enabled again at 440
 - After CAR is enabled, it jumps to `car_init_done` and finally
 `bootblock_c_entry`.
+
+## 2024-07-03
+- Load-heavy target code can be *very* easily glitched, but the results I get
+over UART are weird. I get >0 successful glitches, but the faulted values
+are either 0xAAAAAAAA (the standard value) or 0x00000000 (initialization
+value).
+	- Actually sometimes I have 0xAAAAAA00/0xAAAA0000, which is interesting
+	but max 0.3% of the times.
+	- Good parameters are
+	`python3 data_collector.py glitch2.db load_d4f52c3 load --ext-offset 90 150 1 --prep-voltage 36 36 1 --width 10 30 1 --voltage 35 35 1`
+- VCC controls VCore and also L1/L2 cache voltage (they are part of the core)
+Source: "The Forgotten ‘Uncore’: On the Energy-Efficiency of Heterogeneous Cores"
+by 5 intel people

@@ -28,7 +28,8 @@ typedef struct readu32_s {
 void target_uart_init(void);
 bool ping_target(void);
 void uart_echo(void);
-bool glitcher_arm(void);
+bool glitcher_arm_mul(void);
+bool glitcher_arm_load(void);
 int measure_loop(void);
 bool uart_debug_pin_toggle(void);
 

@@ -25,7 +25,8 @@
 #define S_CMD_S_PIN_STATE			0x15	/* Enable/disable output drivers				*/
 
 // picocode glitching commands
-#define P_CMD_ARM					0x20	/* Enable glitch handler						*/
+#define P_CMD_ARM_MUL				0x20	/* Enable glitch handler for mul				*/
+#define P_CMD_ARM_LOAD				0x21	/* Enable glitch handler for mov <reg> <stack>	*/
 #define P_CMD_FORCE					0x22	/* Force write to PMBus to perform a glitch		*/
 #define P_CMD_SET_VOLTAGE			0x23	/* Set glitch voltage							*/
 #define P_CMD_SET_EXT_OFFST			0x24	/* Set external offset (wait after trig.) in us	*/
