@@ -259,7 +259,43 @@ value).
 	- Actually sometimes I have 0xAAAAAA00/0xAAAA0000, which is interesting
 	but max 0.3% of the times.
 	- Good parameters are
-	`python3 data_collector.py glitch2.db load_d4f52c3 load --ext-offset 90 150 1 --prep-voltage 36 36 1 --width 10 30 1 --voltage 35 35 1`
+```bash
+python3 data_collector.py glitch2.db <table name> load --ext-offset 90 150 1 --prep-voltage 36 36 1 --width 10 30 1 --voltage 35 35 1
+```
 - VCC controls VCore and also L1/L2 cache voltage (they are part of the core)
 Source: "The Forgotten ‘Uncore’: On the Energy-Efficiency of Heterogeneous Cores"
 by 5 intel people
+
+## 2024-07-04
+- Verified that old mul target is also glitchable with the same parameters I
+have found for the load target. Target code just did not run for long enough,
+so the voltage was still low at the end of the loop, and the CPU died. I
+increased the loop duration and got glitches there as well, this means that
+all my tests are consistent.
+
+## 2024-07-05
+- Started to play around with ucode patching + studied uopcode "documentation"
+
+## 2024-07-06
+- Patched `rdrand` to perform (`ecx += eax != ebx`):
+	```
+	tmp0 = eax - ebx
+	if (tmp0 == 0) ecx += 1
+	```
+Works in both 64 and 32 bit code with libmicro on linux
+- Added this code in coreboot, target CPU hangs after "some" short amount of
+time
+
+## 2024-07-07
+- Determined that the CPU hangs only when I have a conditional jump in ucode
+- Tried to make conditional seqwords work. No luck (maybe I am stupid)
+- Changed ucode to perform (`ecx += eax - ebx`):
+	```
+	tmp0 = eax - ebx
+	ecx += tmp0
+	```
+- Found glitces in ucode! :D
+Params:
+```bash
+python3 data_collector.py glitch2.db _6a234f1_customucode cmp --ext-offset 90 150 1 --prep-voltage 34 36 1 --width 1 30 1 --voltage 32 34 1
+```

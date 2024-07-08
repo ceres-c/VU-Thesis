@@ -1,51 +1,35 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define MUL_ITERATIONS 100000
+#define REP10(BODY) \
+		BODY BODY BODY BODY BODY BODY BODY BODY BODY BODY
+#define CODE_BODY \
+	"movl %[op1], %%eax;\n\t" \
+	"imull %[op2], %%eax;\n\t" \
+	"movl %[op1], %%ebx;\n\t" \
+	"imull %[op2], %%ebx;\n\t" \
+	"xor %%ecx, %%ecx;\n\t" \
+	"cmp %%eax, %%ebx;\n\t" \
+	"setne %%cl;\n\t" \
+	"addl %%ecx, %[fault_count]\n\t"
 
 int main() {
-	uint32_t performed = 0;
-	uint32_t operand1 = 0x80000;
-	uint32_t operand2 = 0x4;
-	uint32_t faulty_result_found = 0;
 
-	#pragma GCC unroll 10
-	while (performed++ < MUL_ITERATIONS) {
+		uint32_t operand1 = 0x80000, operand2 = 0x4; // Taken from plundervolt paper // TODO add command to change these
+		uint32_t result_a = 0, result_b = 0;
+		uint32_t fault_count = 0;
+
 		__asm__ volatile (
-			"movl %[op1], %%eax;\n\t"
-			"imull %[op2], %%eax;\n\t"
-			"movl %[op1], %%ebx;\n\t"
-			"imull %[op2], %%ebx;\n\t"
-			"xor %%ecx, %%ecx;\n\t"
-			"cmp %%eax, %%ebx;\n\t"
-			"setne %%cl;\n\t"
-			"addl %%ecx, %[faulty_result]\n\t"
+			// REP100(REP100(CODE_BODY))
+			// REP100(REP100(CODE_BODY))
+			// REP100(REP100(CODE_BODY))
+			REP10(CODE_BODY)
 
-			: [faulty_result] "+r" (faulty_result_found)	// Output operands
+			: [fault_count] "+r" (fault_count)			// Output operands
 			: [op1] "r" (operand1), [op2] "r" (operand2)	// Input operands
-			: "%eax", "%ebx", "%ecx"
-								// Clobbered register
+			: "%eax", "%ebx", "%ecx"						// Clobbered register
 		);
-	}
 
-	// __asm__ volatile (
-	// 	"movl $100000, %%ecx\n\t"
-	// 	"head:\n\t"
-	// 	"movl %[op1], %%eax;\n\t"
-	// 	"imull %[op2], %%eax;\n\t"
-	// 	"movl %[op1], %%ebx;\n\t"
-	// 	"imull %[op2], %%ebx;\n\t"
-	// 	"cmp %%eax, %%ebx;\n\t"
-	// 	"setne %%al;\n\t"
-	// 	"movzx %%al, %%eax;\n\t"
-	// 	"addl %%eax , %[faulty_result]\n\t"
-	// 	"decl %%ecx\n\t"
-	// 	"jnz head\n\t"
-	// 	: [faulty_result] "+r" (faulty_result_found)	// Output operands
-	// 	: [op1] "r" (operand1), [op2] "r" (operand2)	// Input operands
-	// 	: "%eax", "%ebx", "%ecx"						// Clobbered register
-	// );
-
-	printf("Result: 0x%x\n", faulty_result_found);
+	printf("Result: 0x%x\n", fault_count);
 	return 0;
 }
