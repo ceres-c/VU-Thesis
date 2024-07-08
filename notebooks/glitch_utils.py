@@ -8,18 +8,19 @@ import matplotlib.figure
 import matplotlib.pyplot as plt
 from enum import Enum
 from matplotlib.ticker import MaxNLocator
-from typing import Annotated, Iterator, TypedDict
+from typing import Iterator, TypedDict
 
 import serial
 
 P_CMD_ARM_MUL				= b'\x20'	# Enable glitch handler for mul
-P_CMD_ARM_LOAD				= b'\x21'	# Enable glitch handler for mov <reg> <stack>
-P_CMD_FORCE					= b'\x22'	# Force write to PMBus to perform a glitch
-P_CMD_SET_VOLTAGE			= b'\x23'	# Set glitch voltage
-P_CMD_SET_EXT_OFFST			= b'\x24'	# Set external offset (wait after trig.) in us
-P_CMD_SET_WIDTH				= b'\x25'	# Set glitch width	(duration of glitch) in us
-P_CMD_SET_PREP_VOLTAGE		= b'\x26'	# Set Vp (preparation voltage) before glitch
-P_CMD_SET_PREP_TIME			= b'\x27'	# Set Tp (preparation width) before glitch
+P_CMD_ARM_LOAD				= b'\x21'	# Enable glitch handler for mov <reg>, <stack> (Intel syntax)
+P_CMD_ARM_CMP				= b'\x22'	# Enable glitch handler for cmp
+
+P_CMD_FORCE					= b'\x30'	# Force write to PMBus to perform a glitch
+P_CMD_SET_VOLTAGE			= b'\x31'	# Set glitch voltage
+P_CMD_SET_EXT_OFFST			= b'\x32'	# Set external offset (wait after trig.) in us
+P_CMD_SET_WIDTH				= b'\x33'	# Set glitch width	(duration of glitch) in us
+P_CMD_SET_PREP_VOLTAGE		= b'\x34'	# Set Vp (preparation voltage) before glitch
 
 P_CMD_PING					= b'\x70'	# Ping from host to picocoder
 P_CMD_TARGET_PING			= b'\x71'	# Ping from picocoder to target
@@ -648,3 +649,56 @@ class Picocoder:
 			return GlitchResult.WEIRD, unexpected_data
 		else:
 			return GlitchResult.WEIRD, data
+
+	def glitch_cmp(self, glitch_setting: GlitchSettings) -> tuple[GlitchResult, int|bytes|None]:
+		'''
+		Perform a glitch on `cmp` with the given settings.
+		When a successful glitch is performed, the function returns the number of successful glitches
+		'''
+
+		if not self._connected:
+			ping = self.ping()
+			if not ping:
+				raise ConnectionError('Could not connect to picocoder')
+			self._connected = ping
+
+		self._apply_settings(glitch_setting)
+
+		self.s.reset_input_buffer()
+		self.s.write(P_CMD_ARM_CMP)
+
+		data = self.s.read(1)
+		if not data:
+			raise ConnectionError('Could not connect to picocoder')
+
+		if data == P_CMD_RESULT_UNREACHABLE:
+			# No trigger received
+			return GlitchResult.BROKEN, data
+		elif data == P_CMD_RESULT_PMIC_FAIL:
+			# Could not send command to PMIC
+			return GlitchResult.BROKEN, data
+		elif data == P_CMD_RESULT_RESET:
+			# Target died during the glitch
+			return GlitchResult.RESET, None
+		elif data == P_CMD_RESULT_NORMAL:
+			# Glitch did not work, board continued running normally
+			return GlitchResult.NORMAL, None
+		elif data == P_CMD_RESULT_SUCCESS:
+			# Glitch worked
+			successes = self.s.read(4)
+			if not successes:
+				raise ConnectionError('Did not receive succesful glitches count from picocoder after P_CMD_RESULT_SUCCESS')
+			successes = struct.unpack('<I', successes)[0]
+			return GlitchResult.SUCCESS, successes
+		elif data == P_CMD_RESULT_DATA_TIMEOUT:
+			# Target reported a success when glitching, but did not send data back after glitch
+			return GlitchResult.HALF_SUCCESS, None
+		elif data == P_CMD_RESULT_ZOMBIE:
+			# Target sent some other unexpected data
+			unexpected_data = self.s.read(1)
+			if not unexpected_data:
+				raise ConnectionError('Did not receive unexpected data from picocoder after P_CMD_RESULT_ZOMBIE')
+			return GlitchResult.WEIRD, unexpected_data
+		else:
+			return GlitchResult.WEIRD, data
+		

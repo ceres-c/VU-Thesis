@@ -194,6 +194,42 @@ def glitch_loop_load(
 			break
 	return 0
 
+def glitch_loop_cmp(
+		db: GlitchSQLite, ps: PowerSupply, gc: glitch_utils.GlitchController, glitcher: glitch_utils.Picocoder, stop_half_success: bool, stop_success: bool
+	) -> int:
+	start = time.time()
+	for i, gs in enumerate(gc.rand_glitch_values()):
+		if i % 5 == 0:
+			print(f'Iteration {i}, rate {i/(time.time()-start):.2f}Hz         ', end='\r', flush=True) # spaces to overwrite prev line
+		try:
+			read_result, read_data = glitcher.glitch_cmp(gs)
+			if read_result == GlitchResult.SUCCESS:
+				successes = read_data
+				db.insert_result(gs['ext_offset'], gs['width'], gs['voltage'], gs['prep_voltage'], read_result.name, successes=successes)
+			else:
+				db.insert_result(gs['ext_offset'], gs['width'], gs['voltage'], gs['prep_voltage'], read_result.name, data=read_data)
+
+			if stop_half_success and read_result == GlitchResult.HALF_SUCCESS:
+				print('Half-success detected, stopping. Target is left in its current state')
+				break
+			if stop_success and read_result == GlitchResult.SUCCESS:
+				print('Success detected, stopping. Target is left in its current state')
+				break
+
+			if read_result in [GlitchResult.RESET, GlitchResult.BROKEN, GlitchResult.HALF_SUCCESS]:
+				try:
+					reset_target(ps, glitcher)
+				except ConnectionError:
+					print('Failed to reset target, shutting down')
+					ps.on = False
+					return 1
+
+		except KeyboardInterrupt:
+			print(f'\nExiting. Total runtime: {time.time()-start:.2f}s')
+			ps.power_cycle()
+			break
+	return 0
+
 def main(a: Namespace) -> int:
 	settings_str = settings_to_str(a.ext_offset, a.width, a.voltage, a.prep_voltage)
 	db = GlitchSQLite(a.db_file, a.db_table, settings_str, a.extra_descr)
@@ -235,6 +271,8 @@ def main(a: Namespace) -> int:
 		return glitch_loop_mul(db, ps, gc, glitcher, a.stop_half_success, a.stop_success)
 	elif a.operation == 'load':
 		return glitch_loop_load(db, ps, gc, glitcher, a.stop_half_success, a.stop_success)
+	elif a.operation == 'cmp':
+		return glitch_loop_cmp(db, ps, gc, glitcher, a.stop_half_success, a.stop_success)
 	else:
 		raise ValueError(f'Invalid operation {a.operation}')
 
@@ -242,7 +280,7 @@ if __name__ == '__main__':
 	argparser = ArgumentParser(description='Simple script to run a glitch campaign and save results to a database')
 	argparser.add_argument('db_file', default='glitch_results.db', type=str, help='Database file name')
 	argparser.add_argument('db_table', type=str, help='Database table name (e.g. target commit hash) - Don\'t name it `; OR 1=1` please')
-	argparser.add_argument('operation', type=str, choices=['mul', 'load'], help='The operation to glitch')
+	argparser.add_argument('operation', type=str, choices=['mul', 'load', 'cmp'], help='The operation to glitch')
 	argparser.add_argument('--power-supply-port', default='/dev/ttyACM0', type=str, help='Power supply serial port (default /dev/ttyACM0)')
 	argparser.add_argument('--glitcher-port', default='/dev/ttyACM1', type=str, help='Glitcher serial port (default /dev/ttyACM1)')
 	argparser.add_argument('--ext-offset', nargs=3, type=int, metavar=('start', 'end', 'step'), help='External offset range', required=True)

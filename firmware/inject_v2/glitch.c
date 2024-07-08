@@ -222,7 +222,7 @@ bool glitcher_arm_load(void) {
 	/*
 	 * Performs a glitch with the current glitch parameters and checks the target response.
 	 * It directly sends data over USB to the host with the result of the glitch.
-	 * Can send 3 different results:
+	 * Can send 7 different results:
 	 *	- P_CMD_RESULT_UNREACHABLE: no trigger received
 	 *	- P_CMD_RESULT_PMIC_FAIL: could not send command to PMIC over i2c
 	 *	- P_CMD_RESULT_RESET: target died during the glitch
@@ -291,6 +291,87 @@ bool glitcher_arm_load(void) {
 			putchar(P_CMD_RESULT_SUCCESS);
 			putu32(successes.val);
 			putu32(wrong_value.val);
+		}
+		break;
+	default:
+		putchar(P_CMD_RESULT_ZOMBIE);
+		putchar(data);
+		break;
+	}
+	return true;
+}
+
+bool glitcher_arm_cmp(void) {
+	/*
+	 * Performs a glitch with the current glitch parameters and checks the target response.
+	 * It directly sends data over USB to the host with the result of the glitch.
+	 * Can send 7 different results:
+	 *	- P_CMD_RESULT_UNREACHABLE: no trigger received
+	 *	- P_CMD_RESULT_PMIC_FAIL: could not send command to PMIC over i2c
+	 *	- P_CMD_RESULT_RESET: target died during the glitch
+	 *	- P_CMD_RESULT_NORMAL: glitch did not work, board continued running normally
+	 *	- P_CMD_RESULT_SUCCESS: glitch worked
+	 *		Will send 1 additional uint32_t value: the number of successes
+	 *	- P_CMD_RESULT_DATA_TIMEOUT: target reported a success when glitching, but did not send data back after glitch
+	 *	- P_CMD_RESULT_ZOMBIE: target sent some other unexpected data (?)
+	 *		Will send 1 uint8_t value with the unexpected data
+	 */
+	volatile uint8_t data;
+	uint32_t th, tl;
+
+	data = uart_hw_read(); // Clear the RX FIFO
+
+	// Wait for trigger
+	th = timer_hw->timerawh;
+	tl = timer_hw->timerawl;
+	th += tl + TARGET_REACHABLE_US < tl;
+	tl += TARGET_REACHABLE_US;
+	do {
+		if (uart_hw_readable()) goto triggered;
+	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
+	putchar(P_CMD_RESULT_UNREACHABLE);
+	return false;
+
+	triggered:
+	int write_prep_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_prep, TPS_WRITE_REG_CMD_LEN, false, 100);
+	busy_wait_us_32(glitch.ext_offset);
+	int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
+	busy_wait_us_32(glitch.width);
+	int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
+
+	data = uart_hw_read(); // Clear the RX FIFO (doing it now as it's not time critical)
+	if (write_prep_res != TPS_WRITE_REG_CMD_LEN | write_glitch_res != TPS_WRITE_REG_CMD_LEN || write_restore_res != TPS_WRITE_REG_CMD_LEN) {
+		putchar(P_CMD_RESULT_PMIC_FAIL);
+		return false;
+	}
+
+	// Check if target is still alive
+	th = timer_hw->timerawh;
+	tl = timer_hw->timerawl;
+	th += tl + TARGET_REACHABLE_US < tl;
+	tl += TARGET_REACHABLE_US;
+	do {
+		if (uart_hw_readable()) goto alive;
+	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
+	putchar(P_CMD_RESULT_RESET);
+	return false;
+
+	alive:
+	data = uart_hw_read();
+	switch (data) {
+	case T_CMD_READY:
+		// ready -> nothing happened, glitch not working
+		putchar(P_CMD_RESULT_NORMAL);
+		break;
+	case T_CMD_SUCCESS:
+		// success -> glitch worked
+		readu32_t successes;
+		uart_hw_readu32(&successes);
+		if (!successes.valid) {
+			putchar(P_CMD_RESULT_DATA_TIMEOUT);
+		} else {
+			putchar(P_CMD_RESULT_SUCCESS);
+			putu32(successes.val);
 		}
 		break;
 	default:

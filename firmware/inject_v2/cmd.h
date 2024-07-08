@@ -26,13 +26,14 @@
 
 // picocode glitching commands
 #define P_CMD_ARM_MUL				0x20	/* Enable glitch handler for mul				*/
-#define P_CMD_ARM_LOAD				0x21	/* Enable glitch handler for mov <reg> <stack>	*/
-#define P_CMD_FORCE					0x22	/* Force write to PMBus to perform a glitch		*/
-#define P_CMD_SET_VOLTAGE			0x23	/* Set glitch voltage							*/
-#define P_CMD_SET_EXT_OFFST			0x24	/* Set external offset (wait after trig.) in us	*/
-#define P_CMD_SET_WIDTH				0x25	/* Set glitch width	(duration of glitch) in us	*/
-#define P_CMD_SET_PREP_VOLTAGE		0x26	/* Set Vp (preparation voltage) before glitch	*/
-#define P_CMD_SET_PREP_TIME			0x27	/* Set Tp (preparation width) before glitch		*/
+#define P_CMD_ARM_LOAD				0x21	/* Enable glitch handler for mov <reg>, <stack>	(Intel syntax) */
+#define P_CMD_ARM_CMP				0x22	/* Enable glitch handler for cmp				*/
+
+#define P_CMD_FORCE					0x30	/* Force write to PMBus to perform a glitch		*/
+#define P_CMD_SET_VOLTAGE			0x31	/* Set glitch voltage							*/
+#define P_CMD_SET_EXT_OFFST			0x32	/* Set external offset (wait after trig.) in us	*/
+#define P_CMD_SET_WIDTH				0x33	/* Set glitch width	(duration of glitch) in us	*/
+#define P_CMD_SET_PREP_VOLTAGE		0x34	/* Set Vp (preparation voltage) before glitch	*/
 
 // picocode glitch results
 #define P_CMD_RESULT_RESET			0x50	/* Target reset									*/

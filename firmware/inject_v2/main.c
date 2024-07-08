@@ -126,6 +126,9 @@ void process(pio_spi_inst_t *spi, int command) {
 		case P_CMD_ARM_LOAD:
 			glitcher_arm_load();
 			break;
+		case P_CMD_ARM_CMP:
+			glitcher_arm_cmp();
+			break;
 		case P_CMD_FORCE:
 			busy_wait_us_32(glitch.ext_offset);
 			int write_glitch_res = i2c_write_timeout_us(
