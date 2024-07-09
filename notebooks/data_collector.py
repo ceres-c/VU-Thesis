@@ -1,13 +1,17 @@
 #! /usr/bin/env python3
 
+import pathlib
+import sys
 from argparse import ArgumentParser, Namespace
 import sqlite3
 from sqlite3 import Error
 import time
 
-import glitch_utils
-from glitch_utils import GlitchResult # Used way too much to not import it
-from power_supply import PowerSupply, KA3305P
+# Add the parent directory to the path so we can import the picocoder_py module
+sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
+import picocoder_py
+from picocoder_py import Picocoder, GlitchController, GlitchControllerTPS65094, GlitchResult, TargetType
+from picocoder_py import PowerSupply, KA3305P
 
 GLITCHER_BAUD = 115200
 
@@ -65,17 +69,49 @@ class GlitchSQLite():
 		self.c.execute(f'SELECT COUNT(*) FROM {table_name if table_name else self.table_name}')
 		return self.c.fetchone()[0]
 
-	def create_table(self) -> None:
-		self.c.execute(f'CREATE TABLE {self.table_name} (ext_offset INTEGER, width INTEGER, voltage INTEGER, prep_voltage INTEGER, result STRING, data BLOB, successes INTEGER, result_a INTEGER, result_b INTEGER)')
+	def create_table(self, target_type: TargetType) -> None:
+
+		query  = f'CREATE TABLE {self.table_name} '
+		query += '(ext_offset INTEGER, width INTEGER, voltage INTEGER, prep_voltage INTEGER, result STRING, data BLOB'
+		for var in target_type.ret_vars:
+			query += f', {var} INTEGER'
+		query += ')'
+		self.c.execute(query)
 		self.c.execute('INSERT INTO settings VALUES (?, ?, ?)', (self.table_name, self.settings, self.extra))
 		self.conn.commit()
 
-	def insert_result(self,
-				   ext_offset: int, width: int, voltage: int, prep_voltage: int, result: str,
-				   data: bytes|None = b'', successes: int = 0, result_a: int = 0, result_b: int = 0) -> None:
-		if data is None:
-			data = b''
-		self.c.execute(f'INSERT INTO {self.table_name} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (ext_offset, width, voltage, prep_voltage, result, data, successes, result_a, result_b))
+	def insert_result(self, target_type: TargetType,
+				   ext_offset: int, width: int, voltage: int, prep_voltage: int, result: GlitchResult,
+				   data: tuple|bytes|None = b'', ) -> None:
+		'''
+		Insert a result into the database
+
+		Args:
+			target_type (TargetType): Target type
+			ext_offset (int): External offset
+			width (int): Width
+			voltage (int): Glitch voltage
+			prep_voltage (int): Preparation voltage
+			result (GlitchResult): Glitch result
+			data (tuple|bytes|None): Data associated with the result
+		'''
+
+		if type(data) is tuple:
+			data_tuple = data
+			data_blob = b''
+		elif type(data) is bytes:
+			data_tuple = tuple([0] * target_type.ret_count)
+			data_blob = data
+		elif data is None:
+			data_tuple = tuple([0] * target_type.ret_count)
+			data_blob = b''
+		else:
+			raise ValueError(f'Invalid data type {type(data)}')
+
+		query = f'INSERT INTO {self.table_name} VALUES (?, ?, ?, ?, ?, ?' # ext_offset, width, voltage, prep_voltage, result, data
+		query += ', ?' * target_type.ret_count
+		query += ')'
+		self.c.execute(query, (ext_offset, width, voltage, prep_voltage, result.name, data_blob, *data_tuple))
 		self.conn.commit()
 
 	def set_schema(self, schema: str) -> None:
@@ -87,7 +123,7 @@ class GlitchSQLite():
 
 
 
-def reset_target(ps: PowerSupply, glitcher: glitch_utils.Picocoder, retries: int = 3) -> None:
+def reset_target(ps: PowerSupply, glitcher: Picocoder, retries: int = 3) -> None:
 	for _ in range(retries):
 		ps.power_cycle()
 		if glitcher.ping_target():
@@ -122,101 +158,30 @@ def settings_to_str(ext_offset: list, width: list, voltage: list, prep_voltage: 
 		ret += f'({prep_voltage[2]})'
 	return ret
 
-def glitch_loop_mul(
-		db: GlitchSQLite, ps: PowerSupply, gc: glitch_utils.GlitchController, glitcher: glitch_utils.Picocoder, stop_half_success: bool, stop_success: bool
-	) -> int:
+def glitch_loop(
+			db: GlitchSQLite,
+			ps: PowerSupply,
+			gc: GlitchController,
+			glitcher: Picocoder,
+			stop_half_success: bool,
+			stop_success: bool
+		) -> int:
 	start = time.time()
 	for i, gs in enumerate(gc.rand_glitch_values()):
 		if i % 5 == 0:
 			print(f'Iteration {i}, rate {i/(time.time()-start):.2f}Hz         ', end='\r', flush=True) # spaces to overwrite prev line
 		try:
-			read_result, read_data = glitcher.glitch_mul(gs)
-			if read_result == GlitchResult.SUCCESS:
-				[successes, result_a, result_b] = read_data
-				db.insert_result(gs['ext_offset'], gs['width'], gs['voltage'], gs['prep_voltage'], read_result.name, successes=successes, result_a=result_a, result_b=result_b)
-			else:
-				db.insert_result(gs['ext_offset'], gs['width'], gs['voltage'], gs['prep_voltage'], read_result.name, data=read_data)
+			result, data = glitcher.glitch(gs)
+			db.insert_result(glitcher.tc, gs['ext_offset'], gs['width'], gs['voltage'], gs['prep_voltage'], result, data)
 
-			if stop_half_success and read_result == GlitchResult.HALF_SUCCESS:
+			if stop_half_success and result == GlitchResult.HALF_SUCCESS:
 				print('Half-success detected, stopping. Target is left in its current state')
 				break
-			if stop_success and read_result == GlitchResult.SUCCESS:
+			if stop_success and result == GlitchResult.SUCCESS:
 				print('Success detected, stopping. Target is left in its current state')
 				break
 
-			if read_result in [GlitchResult.RESET, GlitchResult.BROKEN, GlitchResult.HALF_SUCCESS]:
-				try:
-					reset_target(ps, glitcher)
-				except ConnectionError:
-					print('Failed to reset target, shutting down')
-					ps.on = False
-					return 1
-
-		except KeyboardInterrupt:
-			print(f'\nExiting. Total runtime: {time.time()-start:.2f}s')
-			ps.power_cycle()
-			break
-	return 0
-
-def glitch_loop_load(
-		db: GlitchSQLite, ps: PowerSupply, gc: glitch_utils.GlitchController, glitcher: glitch_utils.Picocoder, stop_half_success: bool, stop_success: bool
-	) -> int:
-	start = time.time()
-	for i, gs in enumerate(gc.rand_glitch_values()):
-		if i % 5 == 0:
-			print(f'Iteration {i}, rate {i/(time.time()-start):.2f}Hz         ', end='\r', flush=True) # spaces to overwrite prev line
-		try:
-			read_result, read_data = glitcher.glitch_load(gs)
-			if read_result == GlitchResult.SUCCESS:
-				(successes, wrong_value) = read_data
-				db.insert_result(gs['ext_offset'], gs['width'], gs['voltage'], gs['prep_voltage'], read_result.name, successes=successes, result_a=wrong_value)
-			else:
-				db.insert_result(gs['ext_offset'], gs['width'], gs['voltage'], gs['prep_voltage'], read_result.name, data=read_data)
-
-			if stop_half_success and read_result == GlitchResult.HALF_SUCCESS:
-				print('Half-success detected, stopping. Target is left in its current state')
-				break
-			if stop_success and read_result == GlitchResult.SUCCESS:
-				print('Success detected, stopping. Target is left in its current state')
-				break
-
-			if read_result in [GlitchResult.RESET, GlitchResult.BROKEN, GlitchResult.HALF_SUCCESS]:
-				try:
-					reset_target(ps, glitcher)
-				except ConnectionError:
-					print('Failed to reset target, shutting down')
-					ps.on = False
-					return 1
-
-		except KeyboardInterrupt:
-			print(f'\nExiting. Total runtime: {time.time()-start:.2f}s')
-			ps.power_cycle()
-			break
-	return 0
-
-def glitch_loop_cmp(
-		db: GlitchSQLite, ps: PowerSupply, gc: glitch_utils.GlitchController, glitcher: glitch_utils.Picocoder, stop_half_success: bool, stop_success: bool
-	) -> int:
-	start = time.time()
-	for i, gs in enumerate(gc.rand_glitch_values()):
-		if i % 5 == 0:
-			print(f'Iteration {i}, rate {i/(time.time()-start):.2f}Hz         ', end='\r', flush=True) # spaces to overwrite prev line
-		try:
-			read_result, read_data = glitcher.glitch_cmp(gs)
-			if read_result == GlitchResult.SUCCESS:
-				successes = read_data
-				db.insert_result(gs['ext_offset'], gs['width'], gs['voltage'], gs['prep_voltage'], read_result.name, successes=successes)
-			else:
-				db.insert_result(gs['ext_offset'], gs['width'], gs['voltage'], gs['prep_voltage'], read_result.name, data=read_data)
-
-			if stop_half_success and read_result == GlitchResult.HALF_SUCCESS:
-				print('Half-success detected, stopping. Target is left in its current state')
-				break
-			if stop_success and read_result == GlitchResult.SUCCESS:
-				print('Success detected, stopping. Target is left in its current state')
-				break
-
-			if read_result in [GlitchResult.RESET, GlitchResult.BROKEN, GlitchResult.HALF_SUCCESS]:
+			if result in [GlitchResult.RESET, GlitchResult.BROKEN, GlitchResult.HALF_SUCCESS]:
 				try:
 					reset_target(ps, glitcher)
 				except ConnectionError:
@@ -239,17 +204,18 @@ def main(a: Namespace) -> int:
 		if resp.lower() != 'y' and resp.lower() != '':
 			return 1
 	else:
-		db.create_table()
+		db.create_table(picocoder_py.target_from_opname(a.operation))
 
 	ps = KA3305P(port=a.power_supply_port, cycle_wait=0.5)
 	ps.con()
 	ps.power_cycle()
 
-	glitcher = glitch_utils.Picocoder(a.glitcher_port, GLITCHER_BAUD)
+	glitcher = Picocoder(a.glitcher_port, GLITCHER_BAUD)
 	if not glitcher.ping():
 		raise ConnectionError('Glitcher not responding')
 	if not glitcher.ping_target():
 		raise ConnectionError('Target not responding')
+	glitcher.tc = picocoder_py.target_from_opname(a.operation)
 
 	max_total_duration = glitcher.measure_loop_duration()
 	if max_total_duration < 0:
@@ -257,7 +223,7 @@ def main(a: Namespace) -> int:
 	if a.ext_offset[2] + a.width[2] > max_total_duration:
 		raise ValueError(f'Max ext_offset + max width > max_total_duration: ({a.ext_offset[2]} + {a.width[2]} > {max_total_duration})')
 
-	gc = glitch_utils.GlitchControllerTPS65094(groups=[r.name for r in GlitchResult], parameters=['ext_offset', 'width', 'voltage', 'prep_voltage'], nominal_voltage=1.24)
+	gc = GlitchControllerTPS65094(groups=[r.name for r in GlitchResult], parameters=['ext_offset', 'width', 'voltage', 'prep_voltage'], nominal_voltage=1.24)
 	gc.set_range('ext_offset', a.ext_offset[0], a.ext_offset[1])
 	gc.set_step('ext_offset', a.ext_offset[2])
 	gc.set_range('width', a.width[0], a.width[1])
@@ -267,20 +233,14 @@ def main(a: Namespace) -> int:
 	gc.set_range('prep_voltage', a.prep_voltage[0], a.prep_voltage[1])
 	gc.set_step('prep_voltage', a.prep_voltage[2])
 
-	if a.operation == 'mul':
-		return glitch_loop_mul(db, ps, gc, glitcher, a.stop_half_success, a.stop_success)
-	elif a.operation == 'load':
-		return glitch_loop_load(db, ps, gc, glitcher, a.stop_half_success, a.stop_success)
-	elif a.operation == 'cmp':
-		return glitch_loop_cmp(db, ps, gc, glitcher, a.stop_half_success, a.stop_success)
-	else:
-		raise ValueError(f'Invalid operation {a.operation}')
+	glitch_loop(db, ps, gc, glitcher, a.stop_half_success, a.stop_success)
+	return 0
 
 if __name__ == '__main__':
 	argparser = ArgumentParser(description='Simple script to run a glitch campaign and save results to a database')
 	argparser.add_argument('db_file', default='glitch_results.db', type=str, help='Database file name')
 	argparser.add_argument('db_table', type=str, help='Database table name (e.g. target commit hash) - Don\'t name it `; OR 1=1` please')
-	argparser.add_argument('operation', type=str, choices=['mul', 'load', 'cmp'], help='The operation to glitch')
+	argparser.add_argument('operation', type=str, choices=picocoder_py.target_op_names(), help='The operation to glitch')
 	argparser.add_argument('--power-supply-port', default='/dev/ttyACM0', type=str, help='Power supply serial port (default /dev/ttyACM0)')
 	argparser.add_argument('--glitcher-port', default='/dev/ttyACM1', type=str, help='Glitcher serial port (default /dev/ttyACM1)')
 	argparser.add_argument('--ext-offset', nargs=3, type=int, metavar=('start', 'end', 'step'), help='External offset range', required=True)

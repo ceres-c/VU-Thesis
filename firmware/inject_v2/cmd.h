@@ -25,9 +25,7 @@
 #define S_CMD_S_PIN_STATE			0x15	/* Enable/disable output drivers				*/
 
 // picocode glitching commands
-#define P_CMD_ARM_MUL				0x20	/* Enable glitch handler for mul				*/
-#define P_CMD_ARM_LOAD				0x21	/* Enable glitch handler for mov <reg>, <stack>	(Intel syntax) */
-#define P_CMD_ARM_CMP				0x22	/* Enable glitch handler for cmp				*/
+#define P_CMD_ARM					0x20	/* Enable glitch handler						*/
 
 #define P_CMD_FORCE					0x30	/* Force write to PMBus to perform a glitch		*/
 #define P_CMD_SET_VOLTAGE			0x31	/* Set glitch voltage							*/
@@ -37,12 +35,12 @@
 
 // picocode glitch results
 #define P_CMD_RESULT_RESET			0x50	/* Target reset									*/
-#define P_CMD_RESULT_NORMAL			0x51	/* No glitch achieved							*/
-#define P_CMD_RESULT_SUCCESS		0x52	/* Glitched successfully						*/
-#define P_CMD_RESULT_ZOMBIE			0x53	/* Target is nor alive nor it reset after glitch */
-#define P_CMD_RESULT_DATA_TIMEOUT	0x54	/* Target timeout after glitch when sending data back (target is alive) */
-#define P_CMD_RESULT_UNREACHABLE	0x55	/* Target unavailable when starting glitch: did not receive anything on the serial port */
-#define P_CMD_RESULT_PMIC_FAIL		0x56	/* Could not send command to PMIC				*/
+#define P_CMD_RESULT_ALIVE			0x51	/* Target is alive								*/
+#define P_CMD_RESULT_ZOMBIE			0x52	/* Target is nor alive nor it reset after glitch */
+#define P_CMD_RESULT_DATA_TIMEOUT	0x53	/* Target timeout after glitch when sending data back (target is alive) */
+#define P_CMD_RESULT_UNREACHABLE	0x54	/* Target unavailable when starting glitch: did not receive anything on the serial port */
+#define P_CMD_RESULT_PMIC_FAIL		0x55	/* Could not send command to PMIC				*/
+#define P_CMD_RESULT_ANSI_CTRL_CODE	0x56	/* Target sent an ANSI control code, data will follow */
 
 // picocode command responses
 #define P_CMD_RETURN_OK				0x61	/* Command successful							*/
@@ -59,4 +57,5 @@
 
 // Commands to/from the target board
 #define T_CMD_READY					'R'		/* The target is alive and ready				*/
-#define T_CMD_SUCCESS				'S'		/* Glitched successfully						*/
+#define T_CMD_DONE					'D'		/* Done with the current loop iteration			*/
+#define T_CMD_ANSI_ESC				0x1B	/* ANSI escape code - preamble to coreboot debug output */
