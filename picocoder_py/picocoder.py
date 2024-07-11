@@ -603,8 +603,9 @@ class Picocoder:
 			ret_data = b''
 			# Target sent an ANSI control code, data will follow
 			# Set shorter timeout and read one byte at a time
+			time.sleep(2) # HACK Wait for pico to retrieve data from target
 			timeout_old = self.s.timeout
-			self.s.timeout = 0.1
+			self.s.timeout = 0.2
 			while True:
 				read_data = self.s.read(1)
 				if not read_data:

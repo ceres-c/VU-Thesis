@@ -206,12 +206,11 @@ bool glitcher_arm(uint8_t expected_ints) {
 	case T_CMD_ANSI_ESC:
 		// target is sending some crash debug info, probably.
 		putchar(P_CMD_RESULT_ANSI_CTRL_CODE);
-		int c = data;
-		do {
-			putchar((uint8_t)data);
-			c = getchar_timeout_us(200);
-		} while (c != PICO_ERROR_TIMEOUT);
-		break;
+		while (true) {
+			putchar(data);
+			if (!uart_is_readable_within_us(UART_TARGET, 1000)) break;
+			data = uart_hw_read();
+		}
 	case T_CMD_READY:
 		// ready -> target reset? Why no done?
 		// fallback
