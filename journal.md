@@ -299,3 +299,22 @@ Params:
 ```bash
 python3 data_collector.py glitch2.db _6a234f1_customucode cmp --ext-offset 90 150 1 --prep-voltage 34 36 1 --width 1 30 1 --voltage 32 34 1
 ```
+
+## 2024-07-08
+- Target now sends the result of any operation to the glitcher, to get rid of
+the if statement at the end of each loop iteration.
+- Tried same parameters that worked with cmp and got same results
+- Tried same parameters that gave me good results with rdrand and it seems
+to be kinda slower because it crashes more often (?). Same amount of glitches
+though, it seems
+
+## 2024-07-09
+- Noticed sometimes the target sends back a coreboot debug message after
+glitch. Changed code to send it to the host.
+
+## 2024-07-10
+- Found relatively good parameters for rdrand-sub glitching (12 successes in 
+~5:30h)
+```bash
+python3 data_collector.py glitch2.db _0d0af5f_customucode_7 rdrand-sub --ext-offset 70 120 1 --prep-voltage 49 49 1 --width 27 27 1 --voltage 33 33 1
+```
