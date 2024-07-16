@@ -205,8 +205,13 @@ bool glitcher_arm(uint8_t expected_ints) {
 		break;
 	case T_CMD_ANSI_ESC:
 		// target is sending some crash debug info, probably.
+		th = timer_hw->timerawh;
+		tl = timer_hw->timerawl;
+		th += tl + CRASH_INFO_TIMEOUT_US < tl;
+		tl += CRASH_INFO_TIMEOUT_US;
 		putchar(P_CMD_RESULT_ANSI_CTRL_CODE);
-		while (true) {
+		while (timer_hw->timerawh < th || timer_hw->timerawl < tl) {
+			// Sometimes the target will start dumping the whole ram, so we need to timeout or we'll get stuck here
 			putchar(data);
 			if (!uart_is_readable_within_us(UART_TARGET, 1000)) break;
 			data = uart_hw_read();
