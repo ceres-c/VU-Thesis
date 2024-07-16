@@ -318,3 +318,70 @@ glitch. Changed code to send it to the host.
 ```bash
 python3 data_collector.py glitch2.db _0d0af5f_customucode_7 rdrand-sub --ext-offset 70 120 1 --prep-voltage 49 49 1 --width 27 27 1 --voltage 33 33 1
 ```
+
+## 2024-07-11
+- Patched rdrand to do `rcx += 1`
+	- Found glitches easily, see table `_3b850a7_customucode_add`
+	- I have mostly values <120000, but also some are way higher (2058130387).
+	Values <120000 can be explained with instruction skips, but how about the
+	other ones? Is this same behavior as rdrand-sub glitches, maybe? Less
+	frequent than instrucion skips, but still there every now and then.
+	- Above is coherent with the *huge* amount of glitches I get with cmp-sete
+	assembly code I had at start: architectural instruction fetches are easier
+	to skip than ucode is to glitch in some other way.
+- Patched rdrand to do `rcx += 1` 10 times in a row (aka `rdrand := ecx += 10`)
+	- I only get values modulo 10, so it seems that the CPU is not executing
+	the whole rdrand instruction, not skipping only ONE uop. Unlucky.
+- SEE MESSAGES FROM 2024-07-11 FROM 22:26 TO 23:30 ON SLACK. IMPORTANT STUFF
+
+
+## 2024-07-14
+- Created register-heavy target. Tested in linux to be working, kills the CPU
+in coreboot.
+- Also I don't know why exception handlers don't work? IDT_IN_EVERY_STAGE is
+enabled in kconfig, but even 1/0 just hangs the cpu
+
+## 2024-07-15
+- Fixed exception handling in coreboot. Something related to multicore stuff in
+ramstage (I don't have multicore yet)
+- ucode still broken
+
+## 2024-07-16
+- ucode registers-heavy fixed: turns out you can't use MOVE in protected mode,
+but ZEXT works.
+- ucode cmp: implemented with SETCC instead of jumps. I guess?
+- ucode cmp: can't get jumps to work. As soon as I try to do a conditional
+jump, the CPU hangs. I have even tried to jump to the standard rdrand code, but
+it still hangs. I have no idea why.
+- Started playing around with register-heavy target. I got a couple of glitches
+but nothing major. Is the register renamer tricking me here?
+	- How do you prevent it from doing its job? Maybe Agner's paper has some
+	info on that?
+
+## 2024-07-17
+- Reading Agner's microarchitecture paper, Goldmont is good for a couple of
+reasons:
+	- §16.5 Macro-op fusion:
+		> There is no Macro-op fusion
+
+		This is nice because, I would assume, makes stuff easier to glitch
+		at uop level. We might have higher chance of glitching smaller
+		uop chunks, maybe?
+
+	- §16.6 Special cases of independence:
+		> The processor **recognizes that xor instructions are independent**
+		> of the prior value of the register if the two input operands are the same register. This works
+		> with 32- and 64-bit registers, mmx, and xmm registers. **It does not work for subtract,**
+		> **compare, or other instructions.**
+
+		This should help me with register-heavy target. Maybe I can use OR 0 or
+		something like that? Add 0? Preferably OR as it should be smaller in
+		ALU
+
+	- §16.7 Execution units
+		> Register-to-register moves **can be eliminated be register renaming** for 32- and 64-bit
+		> registers
+	
+		Yea, shit. Should find a way to prevent register renaming, I guess.
+- Is register renaming a thing with ucode temp registers as well? I'd say so,
+but who knows?
