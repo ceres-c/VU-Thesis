@@ -96,13 +96,13 @@ class TargetCmp(Target):
 		(fault_count, ) = from_target
 		return fault_count > 0
 
-class TargetRdrandSub(Target):
+class TargetRdrandSubAdd(Target):
 	'''
 	Target is running rdrand patched to perform
 	`rcx += rax - rbx`
 	'''
 
-	op_name = 'rdrand-sub'
+	op_name = 'rdrand-sub_add'
 	ret_vars = ['fault_count']
 
 	def is_success(self, from_target: tuple) -> bool:
@@ -112,13 +112,64 @@ class TargetRdrandSub(Target):
 		(fault_count, ) = from_target
 		return fault_count > 0
 
-TargetType: TypeAlias = Target | TargetCmp | TargetLoad | TargetMul | TargetRdrandSub
+class TargetRdrandAdd(Target):
+	'''
+	Target is running rdrand patched to perform
+	`rcx += 1`
+	'''
+
+	op_name = 'rdrand-add'
+	ret_vars = ['summation']
+
+	def is_success(self, from_target: tuple) -> bool:
+		'''
+		Filter function that determines whether a glitch attempt was successful.
+		'''
+		(summation, ) = from_target
+		return summation != 120000 # Number of rdrand calls
+
+class TargetRdrandAddMany(Target):
+	'''
+	Target is running rdrand patched to perform
+	`rcx += 10`
+	'''
+
+	op_name = 'rdrand-add_many'
+	ret_vars = ['summation']
+
+	def is_success(self, from_target: tuple) -> bool:
+		'''
+		Filter function that determines whether a glitch attempt was successful.
+		'''
+		(summation, ) = from_target
+		return summation != 900000 # 90k rdrand calls * 10
+
+class TargetRdrandMovRegs(Target):
+	'''
+	Target is running rdrand patched to perform
+	`rcx = rcx`
+	After moving the source value of rcx around in temp registers
+	'''
+
+	op_name = 'rdrand-mov_regs'
+	ret_vars = ['output']
+
+	def is_success(self, from_target: tuple) -> bool:
+		'''
+		Filter function that determines whether a glitch attempt was successful.
+		'''
+		(output, ) = from_target
+		return output != 0xFFFFFFFF
+
+TargetType: TypeAlias = Target | TargetCmp | TargetLoad | TargetMul | TargetRdrandSubAdd | \
+			TargetRdrandAdd | TargetRdrandAddMany | TargetRdrandMovRegs
 
 def target_op_names() -> list[str]:
 	'''
 	Returns the names of all target operations.
 	'''
-	return [TargetMul.opname, TargetLoad.opname, TargetCmp.opname, TargetRdrandSub.op_name]
+	return [TargetMul.opname, TargetLoad.opname, TargetCmp.opname, TargetRdrandSubAdd.op_name, \
+		    TargetRdrandAdd.op_name, TargetRdrandAddMany.op_name, TargetRdrandMovRegs.op_name]
 
 def target_from_opname(opname: str) -> TargetType:
 	'''
@@ -130,7 +181,13 @@ def target_from_opname(opname: str) -> TargetType:
 		return TargetLoad()
 	elif opname == TargetCmp.opname:
 		return TargetCmp()
-	elif opname == TargetRdrandSub.op_name:
-		return TargetRdrandSub()
+	elif opname == TargetRdrandSubAdd.op_name:
+		return TargetRdrandSubAdd()
+	elif opname == TargetRdrandAdd.op_name:
+		return TargetRdrandAdd()
+	elif opname == TargetRdrandAddMany.op_name:
+		return TargetRdrandAddMany()
+	elif opname == TargetRdrandMovRegs.op_name:
+		return TargetRdrandMovRegs()
 	else:
 		raise ValueError(f'Unknown opname: {opname}')

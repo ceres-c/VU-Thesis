@@ -592,7 +592,7 @@ class Picocoder:
 				return GlitchResult.NORMAL, ret
 		elif data == P_CMD_RESULT_DATA_TIMEOUT:
 			# Target is alive, but it did not send (all) expected data back after glitch
-			return GlitchResult.HALF_SUCCESS, None
+			return GlitchResult.WEIRD, None
 		elif data == P_CMD_RESULT_ZOMBIE:
 			# Target sent some other unexpected data
 			unexpected_data = self.s.read(1)
