@@ -79,11 +79,14 @@ void irq_ping_target_reboot_counter(void) {
 		ping_target_count++;
 	}
 }
-bool ping_target(void) {
+bool ping_target(uint target_count) {
 	/*
 	 * Counts the number of received `R` characters and compares to a fixed number that has been
 	 * verified to be sufficient to guarantee the board is actually running smoothly (not hanging
 	 * right after a reboot) and VCore is stable.
+	 *
+	 * Arguments:
+	 *	- target_count: the number of `R` characters to expect
 	 */
 	bool ret = false;
 	ping_target_count = 0;
@@ -101,13 +104,12 @@ bool ping_target(void) {
 	goto end;
 
 	reachable:
-
 	irq_set_enabled(UART0_IRQ, true);
 	uart_set_irq_enables(UART_TARGET, true, false);
 
 	for (int i = 0; i < PING_VCORE_STABLE_TIME_US / 3000; i++) {
 		busy_wait_us_32(3000);
-		if (ping_target_count >= PING_VCORE_STABLE_CHARS) {
+		if (ping_target_count >= target_count) {
 			ret = true;
 			break;
 		}

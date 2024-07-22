@@ -172,7 +172,10 @@ void process(pio_spi_inst_t *spi, int command) {
 			putchar(P_CMD_PONG);
 			break;
 		case P_CMD_TARGET_PING:
-			putchar(ping_target());
+			putchar(ping_target(PING_VCORE_STABLE_CHARS));
+			break;
+		case P_CMD_TARGET_PING_SLOW:
+			putchar(ping_target(PING_VCORE_STABLE_CHARS_SLOW));
 			break;
 		case P_CMD_MEASURE_LOOP_DURATION:
 			putu32(measure_loop());

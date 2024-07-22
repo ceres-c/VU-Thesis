@@ -50,6 +50,7 @@
 // Misc
 #define P_CMD_PING					0x70	/* Ping from host to picocoder					*/
 #define P_CMD_TARGET_PING			0x71	/* Ping from picocoder to target				*/
+#define P_CMD_TARGET_PING_SLOW		0x72	/* Ping from picocoder to target for slow targets (e.g. ucode update) */
 #define P_CMD_UART_ECHO				0x75	/* Echo UART data from target to USB			*/
 #define P_CMD_MEASURE_LOOP_DURATION	0x76	/* Measure the length (in us) of opcode loop	*/
 #define P_CMD_UART_TOGGLE_DEBUG_PIN	0x77	/* Toggle debug pin on UART data in				*/

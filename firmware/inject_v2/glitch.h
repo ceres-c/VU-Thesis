@@ -11,6 +11,7 @@
 #define VOLT_TEST_TIMEOUT_US		6000 // 6ms timeout to receive all bytes in a voltage test (it normally takes ~5ms)
 #define PING_VCORE_STABLE_TIME_US	350000
 #define PING_VCORE_STABLE_CHARS		220
+#define PING_VCORE_STABLE_CHARS_SLOW	2 // Plenty, as each character takes ~5ms to send with ucode updates
 
 typedef struct glitch_s {
 	uint32_t ext_offset;
@@ -27,7 +28,7 @@ typedef struct readu32_s {
 } readu32_t;
 
 void target_uart_init(void);
-bool ping_target(void);
+bool ping_target(uint target_count);
 void uart_echo(void);
 bool glitcher_arm(uint8_t expected_ints);
 int measure_loop(void);
