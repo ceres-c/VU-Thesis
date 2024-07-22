@@ -211,11 +211,11 @@ def main(a: Namespace) -> int:
 	ps.power_cycle()
 
 	glitcher = Picocoder(a.glitcher_port, GLITCHER_BAUD)
+	glitcher.tc = picocoder_py.target_from_opname(a.operation)
 	if not glitcher.ping():
 		raise ConnectionError('Glitcher not responding')
 	if not glitcher.ping_target():
 		raise ConnectionError('Target not responding')
-	glitcher.tc = picocoder_py.target_from_opname(a.operation)
 
 	max_total_duration = glitcher.measure_loop_duration()
 	if max_total_duration < 0:

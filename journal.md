@@ -383,5 +383,44 @@ reasons:
 		> registers
 	
 		Yea, shit. Should find a way to prevent register renaming, I guess.
+		Maybe OR with 0?
+
 - Is register renaming a thing with ucode temp registers as well? I'd say so,
 but who knows?
+- After a full night of testing, I am getting a low success ratio. I  think
+register renaming is trolling me.
+	- Might want to use OR instead of MOVE, as stated above
+
+- Pietro published an easier to follow sketch of the update process here:
+https://github.com/pietroborrello/CustomProcessingUnit/blob/master/Notes.md#ucode-update
+
+- He refers to this header, which in turn expands on Ben Hawkes findings:
+https://github.com/platomav/MCExtractor/wiki/Intel-Microcode-Extra-Undocumented-Header
+
+- Current ucode revision in FIT image is 0x20
+- Current ucode revision in coreboot's cbfs is 0x28
+
+## 2024-07-18
+- Ucode file rev 0x28 that is actually loaded is: 06-5c-0a
+
+## 2024-07-19
+- HMMMM RC4 is a keystream, does not depend on the ciphertext/plaintext, can I
+flip bytes in ciphertext and get flips in plaintext? (yes)
+- Found new idea: identify valid bitflipped uops/target/source registers in
+ucode and flip the right bit in CRC as well, so I have "legal" ucode that does
+something different. Then, if I can glitch the RSA signature verification, I
+have successfully loaded custom ucode. :D
+
+## 2024-07-20
+< Worked on PhD application >
+
+## 2024-07-21
+- I have code to arbitrarily flip bits in opcodes from the ciphertext, and the
+decrypted ucode will have the correct CRC
+- Now that I think of it, I can technically encode any opcode in the encrypted
+ucode. Applying the right xor mask to the ciphertext will give valid
+(decrypted) opcodes.
+- Seems that the first invocation of the ucode update process takes more cycles
+than the following ones (when the ucode is already updated).
+	- 1st round: ~6193516 cycles
+	- 2nd round: ~5785233 cycles

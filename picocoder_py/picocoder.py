@@ -3,7 +3,7 @@ from math import ceil
 import random
 import struct
 import time
-from typing import Callable, Iterator, TypedDict
+from typing import Iterator, TypedDict
 
 import matplotlib
 import matplotlib.axes
@@ -48,6 +48,7 @@ P_CMD_SET_PREP_VOLTAGE		= b'\x34'	# Set Vp (preparation voltage) before glitch
 
 P_CMD_PING					= b'\x70'	# Ping from host to picocoder
 P_CMD_TARGET_PING			= b'\x71'	# Ping from picocoder to target
+P_CMD_TARGET_PING_SLOW		= b'\x72'	# Ping from picocoder to target for slow targets (e.g. ucode update)
 P_CMD_UART_ECHO				= b'\x75'	# Echo UART data from target to USB
 P_CMD_MEASURE_LOOP_DURATION	= b'\x76'	# Measure the length (in us) of opcode loop
 P_CMD_UART_TOGGLE_DEBUG_PIN	= b'\x77'	# Toggle debug pin on UART data in
@@ -360,6 +361,7 @@ class Picocoder:
 			glitcher_port (str, optional): The port for the glitcher device. Defaults to '/dev/ttyACM0'.
 			baudrate (int, optional): The baudrate for serial communication. Defaults to 115200.
 			timeout (float, optional): The timeout value for serial communication. Defaults to 1.0.
+			slow_target (bool, optional): If True, the target is slow and requires a longer ping timeout. Defaults to False.
 		'''
 		self.s = serial.Serial(glitcher_port, baudrate, timeout=timeout)
 
@@ -500,9 +502,12 @@ class Picocoder:
 		self.s.timeout = 0.5 # This function might take some extra time on the pico side (wait for vcore to reach setpoint)
 		ret: bool = False
 
+		if not issubclass(type(self.tc) , Target):
+			raise ValueError('Set target type before trying to ping it')
+
 		for _ in range(n):
 			self.s.reset_input_buffer()
-			self.s.write(P_CMD_TARGET_PING)
+			self.s.write(P_CMD_TARGET_PING if not self.tc.is_slow else P_CMD_TARGET_PING_SLOW)
 			res = self.s.read(1)
 			if int.from_bytes(res, 'little'):
 				ret = True
