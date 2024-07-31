@@ -218,6 +218,12 @@ each voltage...)
 by PMIC (due to low slew rate). It prints/raise exceptions if settings are not
 feasible.
 
+- Seems like on my CPU, FIT installs the updated ucode on all cores. On some
+other CPUs, it only installs it on the BSP (Boot Strap Processor). This might
+be interesting for software-based attacks on those CPUs (?)
+Source: https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/best-practices/microcode-update-guidance.html#inpage-nav-undefined-undefined
+
+## 2024-06-29
 ## 2024-07-01
 - Tested wider Vp and Vf ranges with stackless code, no success. I estimated
 Vp setting Vf to 1.24V (nominal VCore), and lowering Vp alone. The target is
@@ -424,3 +430,40 @@ ucode. Applying the right xor mask to the ciphertext will give valid
 than the following ones (when the ucode is already updated).
 	- 1st round: ~6193516 cycles
 	- 2nd round: ~5785233 cycles
+
+## 2024-07-22
+- Turns out the ucode update is not copied to L2 cache, but some SRAM used for
+power state C6: https://x.com/_markel___/status/1723000519138988538
+
+## 2024-07-28
+- Tried to make a re-encrypted ucode file with another legal opcode instead of
+NOP, but I don't get any success...
+
+## 2024-07-30
+- Switched to RSA mod flipping. Changed byte at position `0xb0` from `0xb1` to
+`0xb0`.
+	- Original update file takes (median):		6166414 clock cycles
+	- Update with RSA changed takes (median):	4375847 clock cycles
+- I got some glitches with the RSA flipped ucode :D
+	ext_offset=3650:3800(1),width=200:230(1),voltage=31,prep_voltage=37:38(1)
+	(see table _90ec1b5_ucode_update_rsamod_4)
+	- Runtime: 1913.54s
+	- This code reports only the time it took to do the update.
+- Changed target code to return both final ucode version and the time it took
+to update it. This way I can see if the update was successful or not.
+	- Now the same settings don't work anymore :(
+
+## 2024-07-31
+- Left it running all night expanding the search space. Found some successes,
+of which many were just issues with UART code, I'd say (wrong ucode revision)
+or wild time measurements. Some were actually valid ucode revisions and
+sensible update times (in the ballpark of an update on top of the same ucode).
+(see table _90ec1b5_ucode_update_rsamod_6)
+	- Runtime: 34180.64s
+	- Also note, I have table _90ec1b5_ucode_update_rsamod_6_copy where I
+	filtered out the unlikely results
+- Found sweet spot, it's before the one I found yesterday, but same success rate 
+	ext_offset=3570:3590(1),width=150:250(1),voltage=30:31(1),prep_voltage=36:40(1)
+	(see table _90ec1b5_ucode_update_rsamod_7)
+	- Runtime: 564.00s
+- 
