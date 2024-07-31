@@ -462,8 +462,7 @@ sensible update times (in the ballpark of an update on top of the same ucode).
 	- Runtime: 34180.64s
 	- Also note, I have table _90ec1b5_ucode_update_rsamod_6_copy where I
 	filtered out the unlikely results
-- Found sweet spot, it's before the one I found yesterday, but same success rate 
+- Found sweet spot, it's before the one I found yesterday, but same success rate
 	ext_offset=3570:3590(1),width=150:250(1),voltage=30:31(1),prep_voltage=36:40(1)
 	(see table _90ec1b5_ucode_update_rsamod_7)
 	- Runtime: 564.00s
-- 
