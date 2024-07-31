@@ -138,11 +138,11 @@ class TargetRdrandMovRegs(Target):
 
 class TargetUcodeUpdate(Target):
 	'''
-	Target is running the ucode update procedure
+	Target is running the ucode update procedure and returns the final ucode revision
 	'''
 
 	opname = 'ucode_update'
-	ret_vars = ['ucode_rev']
+	ret_vars = ['ucode_rev', 'time']
 	is_slow = True
 
 	def is_success(self, from_target: tuple) -> bool:
@@ -150,10 +150,33 @@ class TargetUcodeUpdate(Target):
 		Filter function that determines whether a glitch attempt was successful.
 		'''
 		(ucode_rev, ) = from_target
-		return ucode_rev != 0x20 # 0x20 is the ucode revision in the Intel FIT package. My modified ucode is based off rev 0x28
+		return ucode_rev == 0x28  # My modified ucode is based off rev 0x28, ucode in FIT package is 0x20
+
+class TargetUcodeUpdateTime(Target):
+	'''
+	Target is running the ucode update procedure and returns how much time (clock cycles) it took
+	'''
+
+	# To finish (failing) the ucode update procedure with a modified update file (changed RSA modulus),
+	# it takes 4375847 clock cycles. We go for 5000000 and that should be good enough.
+	FAILED_UCODE_TIME_MIN =   5000000
+	FAILED_UCODE_TIME_MAX = 100000000 # Most of the times I get weird stuff around 828054490, so this is
+									  # good enough to filter out hex data misinterpreted as time.
+
+	opname = 'ucode_update_time'
+	ret_vars = ['ucode_rev', 'time']
+	is_slow = True
+
+	def is_success(self, from_target: tuple) -> bool:
+		'''
+		Filter function that determines whether a glitch attempt was successful.
+		'''
+		(_, time, ) = from_target
+		return self.FAILED_UCODE_TIME_MIN < time < self.FAILED_UCODE_TIME_MAX
 
 TargetType: TypeAlias = Target | TargetCmp | TargetLoad | TargetMul | TargetRdrandSubAdd | \
-			TargetRdrandAdd | TargetRdrandAddMany | TargetRdrandMovRegs | TargetUcodeUpdate
+			TargetRdrandAdd | TargetRdrandAddMany | TargetRdrandMovRegs | TargetUcodeUpdate | \
+			TargetUcodeUpdateTime
 
 def target_op_names() -> list[str]:
 	'''
@@ -161,7 +184,7 @@ def target_op_names() -> list[str]:
 	'''
 	return [TargetMul.opname, TargetLoad.opname, TargetCmp.opname, TargetRdrandSubAdd.op_name, \
 		    TargetRdrandAdd.op_name, TargetRdrandAddMany.op_name, TargetRdrandMovRegs.op_name, \
-		    TargetUcodeUpdate.opname]
+		    TargetUcodeUpdate.opname, TargetUcodeUpdateTime.opname]
 
 def target_from_opname(opname: str) -> TargetType:
 	'''
@@ -183,5 +206,7 @@ def target_from_opname(opname: str) -> TargetType:
 		return TargetRdrandMovRegs()
 	elif opname == TargetUcodeUpdate.opname:
 		return TargetUcodeUpdate()
+	elif opname == TargetUcodeUpdateTime.opname:
+		return TargetUcodeUpdateTime()
 	else:
 		raise ValueError(f'Unknown opname: {opname}')
