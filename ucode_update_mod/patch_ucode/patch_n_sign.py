@@ -129,9 +129,10 @@ if __name__ == '__main__':
 	print(f'RSA mod: {hex(pubkey.n)}')
 	print(f'RSA sig: {signature.hex()}')	
 
+	print(f'Writing patched and signed ucode update file to {args.update_file}_signed')
 	signature_for_update_file = bytearray(reversed(signature))
 	modulus_for_update_file = bytearray(reversed(CUN.long_to_bytes(pubkey.n, INTEL_RSA_LEN//8)))
-	with open(args.update_file + '.patched', 'wb') as f:
+	with open(args.update_file + '_signed', 'wb') as f:
 		f.write(ucode)
 		f.seek(RSA_SIG_OFF)
 		f.write(signature_for_update_file)
