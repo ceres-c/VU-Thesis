@@ -82,25 +82,94 @@ def parse_ucode_file(ucode: bytearray) -> int:
 #     crc_ok = crc1 == ((uop >> 47) & 1) and crc2 == ((uop >> 46) & 1)
 #     return '!' if not crc_ok else ''
 
+BITMASKS = {
+	'src0': 0b111111,
+	'src1': 0b111111,
+	'dst_src2': 0b111111,
+	'imm1': 0b11111,
+	'm0': 0b1,
+	'imm0': 0b11111111,
+	'opcode': 0b111111111111,
+	'm1': 0b1,
+	'm2': 0b1,
+	'crc1': 0b1,
+	'crc2': 0b1,
+	'seqword': 0b1111111111
+}
+
 class Uop:
 	def __init__(self, uop: int):
-		self.src0 = uop & 0b111111
-		self.src1 = (uop >> 6) & 0b111111
-		self.dst_src2 = (uop >> 12) & 0b111111
-		self.imm1 = (uop >> 18) & 0b11111
-		self.m0 = (uop >> 23) & 0b1
-		self.imm0 = (uop >> 24) & 0b11111111
-		self.opcode = (uop >> 32) & OPCODE_BITMASK
-		self.m1 = (uop >> 44) & 0b1
-		self.m2 = (uop >> 45) & 0b1
-		self.crc1 = (uop >> 46) & 0b1
-		self.crc2 = (uop >> 47) & 0b1
+		self.src0 = uop & BITMASKS['src0']
+		self.src1 = (uop >> 6) & BITMASKS['src1']
+		self.dst_src2 = (uop >> 12) & BITMASKS['dst_src2']
+		self.imm1 = (uop >> 18) & BITMASKS['imm1']
+		self.m0 = (uop >> 23) & BITMASKS['m0']
+		self.imm0 = (uop >> 24) & BITMASKS['imm0']
+		self.opcode = (uop >> 32) & BITMASKS['opcode']
+		self.m1 = (uop >> 44) & BITMASKS['m1']
+		self.m2 = (uop >> 45) & BITMASKS['m2']
+		self.crc1 = (uop >> 46) & BITMASKS['crc1']
+		self.crc2 = (uop >> 47) & BITMASKS['crc2']
+		self.seqword = (uop >> 48) & BITMASKS['seqword']
 		self.seqword_chunk = (uop >> 48) # Keep all the upper bits. Don't know what they do beyond the 10th bit but yea...
+
+		self.funcs = {
+			'src0': self.xor_src0,
+			'src1': self.xor_src1,
+			'dst_src2': self.xor_dst_src2,
+			'imm1': self.xor_imm1,
+			'm0': self.xor_m0,
+			'imm0': self.xor_imm0,
+			'opcode': self.xor_opcode,
+			'm1': self.xor_m1,
+			'm2': self.xor_m2,
+			'seqword': self.xor_seqword
+		}
+
+	def xor_src0(self, mask: int):
+		self.src0 ^= mask
+		self.crc1 ^= reduce(Uop.f_parity, Uop.get_odd_bits(mask))
+		self.crc2 ^= reduce(Uop.f_parity, Uop.get_even_bits(mask))
+
+	def xor_src1(self, mask: int):
+		self.src1 ^= mask
+		self.crc1 ^= reduce(Uop.f_parity, Uop.get_odd_bits(mask))
+		self.crc2 ^= reduce(Uop.f_parity, Uop.get_even_bits(mask))
+
+	def xor_dst_src2(self, mask: int):
+		self.dst_src2 ^= mask
+		self.crc1 ^= reduce(Uop.f_parity, Uop.get_odd_bits(mask))
+		self.crc2 ^= reduce(Uop.f_parity, Uop.get_even_bits(mask))
+
+	def xor_imm1(self, mask: int):
+		self.imm1 ^= mask
+		self.crc1 ^= reduce(Uop.f_parity, Uop.get_odd_bits(mask))
+		self.crc2 ^= reduce(Uop.f_parity, Uop.get_even_bits(mask))
+
+	def xor_m0(self, mask: int):
+		self.m0 ^= mask
+		self.crc2 ^= mask
+
+	def xor_imm0(self, mask: int):
+		self.imm0 ^= mask
+		self.crc1 ^= reduce(Uop.f_parity, Uop.get_odd_bits(mask))
+		self.crc2 ^= reduce(Uop.f_parity, Uop.get_even_bits(mask))
 
 	def xor_opcode(self, mask: int):
 		self.opcode ^= mask
-		self.crc1 ^= reduce(self.f_parity, self.get_odd_bits(mask))		# NOTE: Normally crc1 holds even bits and crc2 odd ones, but
-		self.crc2 ^= reduce(self.f_parity, self.get_even_bits(mask))	# we have to account for our current position in the seqword
+		self.crc1 ^= reduce(Uop.f_parity, Uop.get_odd_bits(mask))
+		self.crc2 ^= reduce(Uop.f_parity, Uop.get_even_bits(mask))
+
+	def xor_m1(self, mask: int):
+		self.m1 ^= mask
+		self.crc1 ^= mask
+
+	def xor_m2(self, mask: int):
+		self.m2 ^= mask
+		self.crc2 ^= mask
+
+	def xor_seqword(self, mask: int):
+		raise NotImplementedError('seqword modification not implemented yet')
 
 	def get_uop_int(self) -> int:
 		return self.src0 | (self.src1 << 6) | (self.dst_src2 << 12) | (self.imm1 << 18) | (self.m0 << 23) | (self.imm0 << 24) | (self.opcode << 32) | (self.m1 << 44) | (self.m2 << 45) | (self.crc1 << 46) | (self.crc2 << 47) | (self.seqword_chunk << 48)
@@ -128,26 +197,20 @@ class Triad:
 		self.uops = [self.uop0, self.uop1, self.uop2]
 		self.seqword = (uop0 >> 48) & SEQWORD_BITMASK | (uop1 >> 48) & SEQWORD_BITMASK << 10 | (uop2 >> 48) & SEQWORD_BITMASK << 20
 
+	def get_triad_bytes(self) -> bytes:
+		return bytearray(self.uop0.get_uop_bytes() + self.uop1.get_uop_bytes() + self.uop2.get_uop_bytes())
+
 if __name__ == '__main__':
 	def auto_int(x):
 		return int(x, 0)
 
 	parser = argparse.ArgumentParser(description='Blind ucode bit fiddler')
 	parser.add_argument('ucode', type=str, help='source ucode update file')
+	parser.add_argument('target', type=str, choices=[k for k in BITMASKS if 'crc' not in k], help='Which part of the uop the mask will be applied to')
 	parser.add_argument('-n', '--num', type=auto_int, default=0, help='0-based index of target uop to modify')
-	group = parser.add_mutually_exclusive_group(required=True)
-	group.add_argument('-u', '--opcode', type=auto_int, help='apply mask to opcode')
-	group.add_argument('-s', '--seqword', type=auto_int, help='apply mask to seqword')
-	# TODO apply mask to other fields in the uop
 	parser.add_argument('-m', '--mask', required=True, type=auto_int, help='xor mask to apply')
 
 	args = parser.parse_args()
-	if args.opcode and (args.mask < 0 or args.mask > OPCODE_BITMASK):
-		parser.error(f'uop mask must be between 0 and 0x{OPCODE_BITMASK:x}')
-	if args.seqword and (args.mask < 0 or args.mask > SEQWORD_BITMASK):
-		parser.error(f'seqword mask must be between 0 and 0x{SEQWORD_BITMASK:x}')
-	if args.seqword:
-		raise NotImplementedError('seqword modification not implemented yet')
 
 	print(f'[+] {args.ucode}')
 	with open(args.ucode, 'rb+') as f:
@@ -161,17 +224,14 @@ if __name__ == '__main__':
 		c += 1 # Skip 0x02 (marks start of ucode code that will be executed)
 		c += 2 # Skip install address
 		c += 2 # Skip patch size
-		c += 8 * floor(args.num / 3) # Skip to the right triad
+		c += 24 * floor(args.num / 3) # Skip to the right triad
+		t = Triad(*struct.unpack_from('<QQQ', ucode, c))
 
-		t = Triad(*struct.unpack("<QQQ", ucode[c:c+24]))
+		if args.mask < 0 or args.mask > BITMASKS[args.target]:
+			parser.error(f'uop mask must be between 0 and 0x{BITMASKS[args.target]:x}')
+		print(f'[+] Original triad:{floor(args.num / 3)},uop:{args.num % 3}: 0x{t.uops[args.num % 3].get_uop_int():016x}')
+		t.uops[args.num % 3].funcs[args.target](args.mask)
+		print(f'[+] Modified triad:{floor(args.num / 3)},uop:{args.num % 3}: 0x{t.uops[args.num % 3].get_uop_int():016x}')
 
-		data = ucode[c + args.num % 3:c + args.num % 3 +8]
-		hexdump(data)
-		print(f'[+] Original uop: 0x{t.uops[args.num % 3].get_uop_int():012x}')
-		hexdump(t.uops[args.num % 3].get_uop_bytes())
-		t.uops[args.num % 3].xor_opcode(args.mask)
-		print(f'[+] Modified uop: 0x{t.uops[args.num % 3].get_uop_int():012x}')
-		hexdump(t.uops[args.num % 3].get_uop_bytes())
-
-		f.seek(c + args.num % 3)
-		f.write(t.uops[args.num % 3].get_uop_bytes())
+		f.seek(c)
+		f.write(t.get_triad_bytes())
