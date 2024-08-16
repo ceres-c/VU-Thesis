@@ -494,6 +494,9 @@ class Picocoder:
 		after 350ms if the target is alive (gives VCore time to ramp up, in case the target just came up).
 		Therefore, this function could possibly take a considerable amount of time (0.5s) to execute.
 
+		NOTE: Right after boot the target CPU is slower than usual, so waiting for the target to perform some
+			  iterations of the loop before considering it alive is a good idea (implemented in firmware code)
+
 		Args:
 			n: number of attempts to ping the target
 			delay: delay between attempts

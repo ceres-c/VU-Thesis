@@ -159,9 +159,11 @@ class TargetUcodeUpdateTime(Target):
 
 	# To finish (failing) the ucode update procedure with a modified update file (changed RSA modulus),
 	# it takes 4375847 clock cycles. We go for 5000000 and that should be good enough.
-	FAILED_UCODE_TIME_MIN =   5000000
-	FAILED_UCODE_TIME_MAX = 100000000 # Most of the times I get weird stuff around 828054490, so this is
-									  # good enough to filter out hex data misinterpreted as time.
+	MOD_FAILED_UCODE_TIME_MIN =   5000000
+	MOD_FAILED_UCODE_TIME_MAX = 100000000 # Most of the times I get weird stuff around 828054490, so this is
+										  # good enough to filter out hex data misinterpreted as time.
+	SIG_FAILED_UCODE_TIME_MIN =   6500000 # Normally it takes ~6.1M to fail the ucode update procedure with an
+										  # ucode update with different content (signature check fails).
 
 	opname = 'ucode_update_time'
 	ret_vars = ['ucode_rev', 'time']
@@ -172,7 +174,7 @@ class TargetUcodeUpdateTime(Target):
 		Filter function that determines whether a glitch attempt was successful.
 		'''
 		(_, time, ) = from_target
-		return self.FAILED_UCODE_TIME_MIN < time < self.FAILED_UCODE_TIME_MAX
+		return self.SIG_FAILED_UCODE_TIME_MIN < time < self.MOD_FAILED_UCODE_TIME_MAX
 
 TargetType: TypeAlias = Target | TargetCmp | TargetLoad | TargetMul | TargetRdrandSubAdd | \
 			TargetRdrandAdd | TargetRdrandAddMany | TargetRdrandMovRegs | TargetUcodeUpdate | \

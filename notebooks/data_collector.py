@@ -190,7 +190,7 @@ def glitch_loop(
 					return 1
 
 		except KeyboardInterrupt:
-			print(f'\nExiting. Total runtime: {time.time()-start:.2f}s')
+			print(f'\nExiting. Total runtime: {time.time()-start:.2f}s') # TODO write this in the db as well
 			ps.power_cycle()
 			break
 	return 0
