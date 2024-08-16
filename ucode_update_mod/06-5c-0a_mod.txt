@@ -1,5 +1,5 @@
 
-[../../06-5c-0a_mod]
+[06-5c-0a_mod]
     CPU: 0x506ca
     size: 0x3ac0
     rev: 0x28
@@ -15,7 +15,7 @@
 UCODE:
 [0000] initialize arrays
 [0001] install addr: 0x7c00 - size 0x007b
-    [6000883f000a] U7c00:  tmp0:= ADD_DSZ32(0x00004f88) !m2 
+    [ed4b883f000a] U7c00:  tmp0:= PORTIN_DSZ64_ASZ16_SC1(0x4f88) !m2 
     [8047010b0c08] U7c01:  tmp0:= NOTAND_DSZ64(0x00000201, tmp0) 
     [ad4f883f000a] U7c02:  PORTOUT_DSZ64_ASZ16_SC1(0x4f88,  , tmp0) !m2 SEQW GOTO U1f9a
       [319f9a80]
@@ -77,7 +77,7 @@ UCODE:
       [300000c0]
     [c0217a570c09] U7c3c:  tmp0:= CONCAT_DSZ32(0x0000357a, tmp0) 
     [7042c0080270] U7c3d:  MOVETOCREG_DSZ64(tmp0, 0x2c0, 32) !m1,m2 SEQW GOTO U1f9a
-    [000000000000] U7c3e:  NOP 
+    [40000001ac30] U7c3e:  tmp0:= ADD_DSZ32(tmp0, tmp0) 
       [019f9a40]
     [100a00000380] U7c40:  TESTUSTATE( , SYS, 0xc000) !m1 ? SEQW GOTO U1f9a
     [206353030200] U7c41:  tmp0:= READURAM( , 0x0053, 64) !m2 
