@@ -32,7 +32,7 @@ class TargetMul(Target):
 	'''
 
 	opname = 'mul'
-	ret_vars = ['fault_count', 'result_a', 'result_b']
+	ret_vars = ['fault_count']
 
 	def is_success(self, from_target: tuple) -> bool:
 		'''
@@ -70,6 +70,21 @@ class TargetCmp(Target):
 		'''
 		(fault_count, ) = from_target
 		return fault_count > 0
+	
+class TargetReg(Target):
+	'''
+	Target is moving data between subregisters and adding up the destination register.
+	'''
+
+	opname = 'reg'
+	ret_vars = ['summation']
+
+	def is_success(self, from_target: tuple) -> bool:
+		'''
+		Filter function that determines whether a glitch attempt was successful.
+		'''
+		(summation, ) = from_target
+		return summation != 271000 # We add 1 to rcx 271k times
 
 class TargetRdrandSubAdd(Target):
 	'''
@@ -176,17 +191,17 @@ class TargetUcodeUpdateTime(Target):
 		(_, time, ) = from_target
 		return self.SIG_FAILED_UCODE_TIME_MIN < time < self.MOD_FAILED_UCODE_TIME_MAX
 
-TargetType: TypeAlias = Target | TargetCmp | TargetLoad | TargetMul | TargetRdrandSubAdd | \
-			TargetRdrandAdd | TargetRdrandAddMany | TargetRdrandMovRegs | TargetUcodeUpdate | \
-			TargetUcodeUpdateTime
+TargetType: TypeAlias = Target | TargetCmp | TargetLoad | TargetMul | TargetReg | \
+			TargetRdrandSubAdd | TargetRdrandAdd | TargetRdrandAddMany | \
+			TargetRdrandMovRegs | TargetUcodeUpdate | TargetUcodeUpdateTime
 
 def target_op_names() -> list[str]:
 	'''
 	Returns the names of all target operations.
 	'''
-	return [TargetMul.opname, TargetLoad.opname, TargetCmp.opname, TargetRdrandSubAdd.op_name, \
-		    TargetRdrandAdd.op_name, TargetRdrandAddMany.op_name, TargetRdrandMovRegs.op_name, \
-		    TargetUcodeUpdate.opname, TargetUcodeUpdateTime.opname]
+	return [TargetMul.opname, TargetLoad.opname, TargetCmp.opname, TargetReg.opname, \
+		 	TargetRdrandSubAdd.op_name, TargetRdrandAdd.op_name, TargetRdrandAddMany.op_name, \
+			TargetRdrandMovRegs.op_name, TargetUcodeUpdate.opname, TargetUcodeUpdateTime.opname]
 
 def target_from_opname(opname: str) -> TargetType:
 	'''
@@ -198,6 +213,8 @@ def target_from_opname(opname: str) -> TargetType:
 		return TargetLoad()
 	elif opname == TargetCmp.opname:
 		return TargetCmp()
+	elif opname == TargetReg.opname:
+		return TargetReg()
 	elif opname == TargetRdrandSubAdd.op_name:
 		return TargetRdrandSubAdd()
 	elif opname == TargetRdrandAdd.op_name:

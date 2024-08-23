@@ -32,6 +32,8 @@ class GlitchSQLite():
 		self.c: sqlite3.Cursor = self.conn.cursor()
 		if not self.has_table('settings'):
 			self.c.execute('CREATE TABLE settings (table_name TEXT PRIMARY KEY, settings TEXT, extra TEXT)')
+		if not self.has_table('runtimes'):
+			self.c.execute('CREATE TABLE runtimes (table_name TEXT PRIMARY KEY, runtime REAL)')
 
 	def __del__(self):
 		self.close()
@@ -114,6 +116,10 @@ class GlitchSQLite():
 		self.c.execute(query, (ext_offset, width, voltage, prep_voltage, result.name, data_blob, *data_tuple))
 		self.conn.commit()
 
+	def set_runtime(self, runtime: float) -> None: # Inserts or increases the runtime
+		self.c.execute(f'INSERT INTO runtimes(table_name, runtime) VALUES(?, ?) ON CONFLICT(table_name) DO UPDATE SET runtime=runtime+{runtime}', (self.table_name, runtime))
+		self.conn.commit()
+
 	def set_schema(self, schema: str) -> None:
 		self.c.execute(f'CREATE TABLE {self.table_name} {schema}')
 		self.conn.commit()
@@ -166,10 +172,10 @@ def glitch_loop(
 			stop_half_success: bool,
 			stop_success: bool
 		) -> int:
-	start = time.time()
+	start_time = time.time()
 	for i, gs in enumerate(gc.rand_glitch_values()):
 		if i % 5 == 0:
-			print(f'Iteration {i}, rate {i/(time.time()-start):.2f}Hz         ', end='\r', flush=True) # spaces to overwrite prev line
+			print(f'Iteration {i}, rate {i/(time.time()-start_time):.2f}Hz         ', end='\r', flush=True) # spaces to overwrite prev line
 		try:
 			result, data = glitcher.glitch(gs)
 			db.insert_result(glitcher.tc, gs['ext_offset'], gs['width'], gs['voltage'], gs['prep_voltage'], result, data)
@@ -190,7 +196,9 @@ def glitch_loop(
 					return 1
 
 		except KeyboardInterrupt:
-			print(f'\nExiting. Total runtime: {time.time()-start:.2f}s') # TODO write this in the db as well
+			end_time = time.time()
+			print(f'\nExiting. Total runtime: {end_time-start_time:.2f}s')
+			db.set_runtime(end_time-start_time)
 			ps.power_cycle()
 			break
 	return 0
