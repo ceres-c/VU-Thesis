@@ -28,9 +28,9 @@
 #define PIN_LED PICO_DEFAULT_LED_PIN
 #define PIN_UART_TX		0	// Pin 1
 #define PIN_UART_RX		1	// Pin 2
-#define PIN_UART_OE		2	// Pin 3 - Level shifter output Enable
-#define PIN_PMBUS_SDA	8	// Pin 6 (Can't use 4 and 5 because of funny soldering on my board)
-#define PIN_PMBUS_SCL	9	// Pin 7
+#define PIN_UART_OE		2	// Pin 4 - Level shifter output Enable
+#define PIN_PMBUS_SDA	8	// Pin 11 (Can't use 4 and 5 because of funny soldering on my board)
+#define PIN_PMBUS_SCL	9	// Pin 12
 #define PIN_SPI_MISO	28	// Pin 34
 #define PIN_SPI_MOSI	27	// Pin 32
 #define PIN_SPI_SCK		26	// Pin 31

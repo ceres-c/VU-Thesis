@@ -5,6 +5,7 @@
 *.hex
 *.pio.h
 *.uf2
+*.ld
 CMakeCache.txt
 CMakeCache.txt
 CMakeDoxy*
