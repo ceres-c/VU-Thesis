@@ -145,6 +145,7 @@ bool glitcher_arm(uint8_t expected_ints) {
 	volatile uint8_t data;
 	uint32_t th, tl;
 	readu32_t rets[10];
+	int write_prep_res = PICO_ERROR_GENERIC, write_glitch_res = PICO_ERROR_GENERIC, write_restore_res = PICO_ERROR_GENERIC;
 
 	if (expected_ints > 10) {
 		return false;
@@ -166,11 +167,11 @@ bool glitcher_arm(uint8_t expected_ints) {
 	return false;
 
 	triggered:
-	int write_prep_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_prep, TPS_WRITE_REG_CMD_LEN, false, 100);
+	write_prep_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_prep, TPS_WRITE_REG_CMD_LEN, false, 100);
 	busy_wait_us_32(glitch.ext_offset);
-	int write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
+	write_glitch_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_glitch, TPS_WRITE_REG_CMD_LEN, false, 100);
 	busy_wait_us_32(glitch.width);
-	int write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
+	write_restore_res = i2c_write_timeout_us(I2C_PMBUS, PMBUS_PMIC_ADDRESS, glitch.cmd_restore, TPS_WRITE_REG_CMD_LEN, false, 100);
 
 	if (write_prep_res != TPS_WRITE_REG_CMD_LEN | write_glitch_res != TPS_WRITE_REG_CMD_LEN || write_restore_res != TPS_WRITE_REG_CMD_LEN) {
 		putchar(P_CMD_RESULT_PMIC_FAIL);
@@ -259,6 +260,7 @@ int measure_loop(void) {
 	}
 
 	// Calculate median time between two resets in standard conditions
+	uint32_t t1 = 0, t2= 0;
 	for (int i = 0; i < ESTIMATE_ROUNDS; i++) {
 		// Wait for connection init from target
 
@@ -274,7 +276,7 @@ int measure_loop(void) {
 		return -1;
 
 		reachable:
-		uint32_t t1 = time_us_32();
+		t1 = time_us_32();
 		data = uart_hw_read();
 		// Don't send anything, now the target will wait for timeout and then reset
 
@@ -290,7 +292,7 @@ int measure_loop(void) {
 		return -1;
 
 		done:
-		uint32_t t2 = time_us_32();
+		t2 = time_us_32();
 		data = uart_hw_read();
 
 		measurements[i] = t2 - t1;

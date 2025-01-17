@@ -1,6 +1,7 @@
 #ifndef _GLITCH_H
 #define _GLITCH_H
 
+#include "pico/error.h"
 #include "picocoder.h"
 #include "cmd.h"
 #include "pmbus.h"

@@ -35,6 +35,7 @@ unsigned char write_buffer[4096];
 
 
 void process(pio_spi_inst_t *spi, int command) {
+	uint8_t expected_ints, new_voltage, new_prep_voltage; // Old gcc does not like variable declarations after a label
 	switch(command) {
 		case S_CMD_NOP:
 			putchar(S_ACK);
@@ -121,7 +122,7 @@ void process(pio_spi_inst_t *spi, int command) {
 			putchar(S_ACK);
 			break;
 		case P_CMD_ARM:
-			uint8_t expected_ints = getchar();
+			expected_ints = getchar();
 			glitcher_arm(expected_ints);
 			break;
 		case P_CMD_FORCE:
@@ -138,7 +139,7 @@ void process(pio_spi_inst_t *spi, int command) {
 			putchar(P_CMD_RETURN_OK);
 			break;
 		case P_CMD_SET_VOLTAGE:
-			uint8_t new_voltage = getchar();
+			new_voltage = getchar();
 			if (new_voltage > TPS_VCORE_MAX) {
 				putchar(P_CMD_RETURN_KO);
 				puts("[!] Value risks frying the CPU. Ignoring");
@@ -156,7 +157,7 @@ void process(pio_spi_inst_t *spi, int command) {
 			putchar(P_CMD_RETURN_OK);
 			break;
 		case P_CMD_SET_PREP_VOLTAGE:
-			uint8_t new_prep_voltage = getchar();
+			new_prep_voltage = getchar();
 			if (new_prep_voltage > TPS_VCORE_MAX) {
 				putchar(P_CMD_RETURN_KO);
 				puts("[!] Value risks frying the CPU. Ignoring");
