@@ -435,7 +435,7 @@ class Picocoder:
 			raise ConnectionError('Could not set voltage: no response')
 		if ret != P_CMD_RETURN_OK:
 			reason = self.s.readline()
-			raise ValueError(f'Could not set voltage. Received: 0x{ret.hex()}: {reason.decode('utf-8', errors='replace')}')
+			raise ValueError(f'Could not set voltage. Received: 0x{ret.hex()}: {reason.decode("utf-8", errors="replace")}')
 
 	@property
 	def prep_voltage(self) -> int:
