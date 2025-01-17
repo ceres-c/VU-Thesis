@@ -1,6 +1,9 @@
 # Software
 In this folder you will find the software component of picocoder.
 
+## Database
+You can download [here](https://mega.nz/file/2plRWQwC#RJ_q7kaOB3b-htbncqA-zl1y91dWcVw2RyKrIw8kXjc) a database with my experimental data.
+
 ## Notebooks
 The notebooks are used to visualize the data collected by the pi pico and
 identify interesting glitching points
