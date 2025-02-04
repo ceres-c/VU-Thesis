@@ -525,9 +525,13 @@ class Picocoder:
 		Asks the picocoder to measure the length (in us) of opcode loop, aka the time between two
 		consecutive trigger signals.
 		'''
+		old_timeout = self.s.timeout	# This function might take a lot of time on the pico side,
+										# as it waits for the target to perform some iterations of the loop
+		self.s.timeout = 2
 		self.s.reset_input_buffer()
 		self.s.write(P_CMD_MEASURE_LOOP_DURATION)
 		data = self.s.read(4)
+		self.s.timeout = old_timeout
 		if not data:
 			raise ConnectionError('Did not get any data from picocoder after P_CMD_MEASURE_LOOP_DURATION')
 		return struct.unpack('<i', data)[0]
