@@ -71,14 +71,6 @@ static void sort(uint32_t *arr, int n) {
 	}
 }
 
-uint ping_target_count = 0;
-void irq_ping_target_reboot_counter(void) {
-	/* Registered as a UART IRQ, whenever an `R` is received it increments ping_target_count */
-	volatile uint8_t d = uart_get_hw(UART_TARGET)->dr; // Clear the interrupt
-	if (d == T_CMD_READY) {
-		ping_target_count++;
-	}
-}
 bool ping_target(uint target_count) {
 	/*
 	 * Counts the number of received `R` characters and compares to a fixed number that has been
@@ -88,38 +80,24 @@ bool ping_target(uint target_count) {
 	 * Arguments:
 	 *	- target_count: the number of `R` characters to expect
 	 */
-	bool ret = false;
-	ping_target_count = 0;
-	irq_set_exclusive_handler(UART0_IRQ, irq_ping_target_reboot_counter);
 
-	volatile uint8_t data = uart_hw_read(); // Start off with a clean RX data register
+	while(uart_hw_readable()) { // Drain buffer
+		volatile uint8_t data = uart_hw_read();
+	}
 
 	uint32_t th = timer_hw->timerawh;
 	uint32_t tl = timer_hw->timerawl;
 	th += tl + TARGET_REACHABLE_US < tl;
 	tl += TARGET_REACHABLE_US;
+	uint32_t count = 0;
 	do {
-		if (uart_hw_readable()) goto reachable;
-	} while (timer_hw->timerawh < th || timer_hw->timerawl < tl);
-	goto end;
-
-	reachable:
-	irq_set_enabled(UART0_IRQ, true);
-	uart_set_irq_enables(UART_TARGET, true, false);
-
-	for (int i = 0; i < PING_VCORE_STABLE_TIME_US / 3000; i++) {
-		busy_wait_us_32(3000);
-		if (ping_target_count >= target_count) {
-			ret = true;
-			break;
+		if (uart_hw_readable()) {
+			if (uart_hw_read() == T_CMD_READY) {
+				count++;
+			}
 		}
-	}
-
-	end:
-	uart_set_irq_enables(UART_TARGET, false, false);
-	irq_set_enabled(UART0_IRQ, false);
-	irq_remove_handler(UART0_IRQ, irq_ping_target_reboot_counter);
-	return ret;
+	} while ((timer_hw->timerawh < th || timer_hw->timerawl < tl) && count < target_count);
+	return count >= target_count;
 }
 
 void uart_echo(void) {

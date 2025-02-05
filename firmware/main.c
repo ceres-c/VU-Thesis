@@ -240,7 +240,7 @@ int main() {
 		while (1)
 			printf("I2C baudrate mismatch: %d. Halting\n", actual_baud);
 	}
-	serprog_spi_init(&spi, 1000000);	// Serprog:	RPi <-> BIOS flash (1 MHz)
+	serprog_spi_init(&spi, 1000000);					// Serprog:	RPi <-> BIOS flash (1 MHz)
 
 	// Command handling
 	while(1) {
