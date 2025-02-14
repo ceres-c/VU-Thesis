@@ -8,11 +8,11 @@
 
 #define READ_TIMEOUT_CYCLES			5000 // At the standard 125MHz, this is 8ns*5000 = 40us (plus loop overhead)
 #define CRASH_INFO_TIMEOUT_US		1000000 // Receive crash info for 1s max
-#define TARGET_REACHABLE_US			7000 // The target sends a `R` every 3ms, if after 7ms we haven't seen it, it's dead
+#define TARGET_REACHABLE_US			9000 // The target sends a `R` every ~3-7,5ms, if after 9ms we haven't seen it, it's dead
 #define VOLT_TEST_TIMEOUT_US		6000 // 6ms timeout to receive all bytes in a voltage test (it normally takes ~5ms)
 #define PING_VCORE_STABLE_TIME_US	350000
 #define PING_VCORE_STABLE_CHARS		220
-#define PING_VCORE_STABLE_CHARS_SLOW	2 // Plenty, as each character takes ~5ms to send with ucode updates
+#define PING_VCORE_STABLE_CHARS_SLOW	1 // With ucode updates, it can take up to 6,6 us per cycle
 
 typedef struct glitch_s {
 	uint32_t ext_offset;
