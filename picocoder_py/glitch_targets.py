@@ -171,7 +171,7 @@ class TargetRdrandLoopAdd(Target):
 		Filter function that determines whether a glitch attempt was successful.
 		'''
 		(summation, ) = from_target
-		return summation != 0x2DFFFF*3
+		return summation != 0x29FFFD
 
 class TargetUcodeUpdate(Target):
 	'''
