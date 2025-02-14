@@ -164,6 +164,7 @@ class TargetRdrandLoopAdd(Target):
 
 	op_name = 'rdrand-loop_add'
 	ret_vars = ['summation']
+	is_slow = True
 
 	def is_success(self, from_target: tuple) -> bool:
 		'''
