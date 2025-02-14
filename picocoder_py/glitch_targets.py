@@ -9,7 +9,7 @@ class Target:
 	Represents the kind of code running on the target.
 	'''
 
-	opname: str = 'unknown'
+	op_name: str = 'unknown'
 	ret_vars: list[str] = []
 	is_slow: bool = False
 
@@ -31,7 +31,7 @@ class TargetMul(Target):
 	Target is running imuls.
 	'''
 
-	opname = 'mul'
+	op_name = 'mul'
 	ret_vars = ['fault_count']
 
 	def is_success(self, from_target: tuple) -> bool:
@@ -46,7 +46,7 @@ class TargetLoad(Target):
 	Target is running loads.
 	'''
 
-	opname = 'load'
+	op_name = 'load'
 	ret_vars = ['fault_count', 'wrong_value']
 
 	def is_success(self, from_target: tuple) -> bool:
@@ -61,7 +61,7 @@ class TargetCmp(Target):
 	Target is running cmps.
 	'''
 
-	opname = 'cmp'
+	op_name = 'cmp'
 	ret_vars = ['fault_count']
 
 	def is_success(self, from_target: tuple) -> bool:
@@ -76,7 +76,7 @@ class TargetReg(Target):
 	Target is moving data between subregisters and adding up the destination register.
 	'''
 
-	opname = 'reg'
+	op_name = 'reg'
 	ret_vars = ['summation']
 
 	def is_success(self, from_target: tuple) -> bool:
@@ -151,12 +151,33 @@ class TargetRdrandMovRegs(Target):
 		(output, ) = from_target
 		return output != 0xFFFFFFFF
 
+class TargetRdrandLoopAdd(Target):
+	'''
+	Target is running rdrand patched to perform
+	```
+	for (i = 0; i < 0xDFFFF; i++)
+		rcx += 1
+		rcx += 1
+		rcx += 1
+	```
+	'''
+
+	op_name = 'rdrand-loop_add'
+	ret_vars = ['summation']
+
+	def is_success(self, from_target: tuple) -> bool:
+		'''
+		Filter function that determines whether a glitch attempt was successful.
+		'''
+		(summation, ) = from_target
+		return summation != 0x2DFFFF*3
+
 class TargetUcodeUpdate(Target):
 	'''
 	Target is running the ucode update procedure and returns the final ucode revision
 	'''
 
-	opname = 'ucode_update'
+	op_name = 'ucode_update'
 	ret_vars = ['ucode_rev', 'time']
 	is_slow = True
 
@@ -180,7 +201,7 @@ class TargetUcodeUpdateTime(Target):
 	SIG_FAILED_UCODE_TIME_MIN =   6500000	# Normally it takes ~6.1M to fail the ucode update procedure with an
 											# ucode update with different content (signature check fails).
 
-	opname = 'ucode_update_time'
+	op_name = 'ucode_update_time'
 	ret_vars = ['ucode_rev', 'time']
 	is_slow = True
 
@@ -193,39 +214,43 @@ class TargetUcodeUpdateTime(Target):
 
 TargetType: TypeAlias = Target | TargetCmp | TargetLoad | TargetMul | TargetReg | \
 			TargetRdrandSubAdd | TargetRdrandAdd | TargetRdrandAddMany | \
-			TargetRdrandMovRegs | TargetUcodeUpdate | TargetUcodeUpdateTime
+			TargetRdrandMovRegs | TargetRdrandLoopAdd | TargetUcodeUpdate | \
+			TargetUcodeUpdateTime
 
 def target_op_names() -> list[str]:
 	'''
 	Returns the names of all target operations.
 	'''
-	return [TargetMul.opname, TargetLoad.opname, TargetCmp.opname, TargetReg.opname, \
+	return [TargetMul.op_name, TargetLoad.op_name, TargetCmp.op_name, TargetReg.op_name, \
 		 	TargetRdrandSubAdd.op_name, TargetRdrandAdd.op_name, TargetRdrandAddMany.op_name, \
-			TargetRdrandMovRegs.op_name, TargetUcodeUpdate.opname, TargetUcodeUpdateTime.opname]
+			TargetRdrandMovRegs.op_name, TargetRdrandLoopAdd.op_name, TargetUcodeUpdate.op_name, \
+			TargetUcodeUpdateTime.op_name]
 
-def target_from_opname(opname: str) -> TargetType:
+def target_from_opname(op_name: str) -> TargetType:
 	'''
-	Returns the target class associated with the given opname.
+	Returns the target class associated with the given op_name.
 	'''
-	if opname == TargetMul.opname:
+	if op_name == TargetMul.op_name:
 		return TargetMul()
-	elif opname == TargetLoad.opname:
+	elif op_name == TargetLoad.op_name:
 		return TargetLoad()
-	elif opname == TargetCmp.opname:
+	elif op_name == TargetCmp.op_name:
 		return TargetCmp()
-	elif opname == TargetReg.opname:
+	elif op_name == TargetReg.op_name:
 		return TargetReg()
-	elif opname == TargetRdrandSubAdd.op_name:
+	elif op_name == TargetRdrandSubAdd.op_name:
 		return TargetRdrandSubAdd()
-	elif opname == TargetRdrandAdd.op_name:
+	elif op_name == TargetRdrandAdd.op_name:
 		return TargetRdrandAdd()
-	elif opname == TargetRdrandAddMany.op_name:
+	elif op_name == TargetRdrandAddMany.op_name:
 		return TargetRdrandAddMany()
-	elif opname == TargetRdrandMovRegs.op_name:
+	elif op_name == TargetRdrandMovRegs.op_name:
 		return TargetRdrandMovRegs()
-	elif opname == TargetUcodeUpdate.opname:
+	elif op_name == TargetRdrandLoopAdd.op_name:
+		return TargetRdrandLoopAdd()
+	elif op_name == TargetUcodeUpdate.op_name:
 		return TargetUcodeUpdate()
-	elif opname == TargetUcodeUpdateTime.opname:
+	elif op_name == TargetUcodeUpdateTime.op_name:
 		return TargetUcodeUpdateTime()
 	else:
-		raise ValueError(f'Unknown opname: {opname}')
+		raise ValueError(f'Unknown op_name: {op_name}')
