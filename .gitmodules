@@ -1,6 +1,6 @@
 [submodule "ucode_update_mod/uCodeDisasm"]
-	path = ucode_update_mod/uCodeDisasm
+	path = ucode/uCodeDisasm
 	url = https://github.com/ceres-c/uCodeDisasm.git
 [submodule "ucode_update_mod/CustomProcessingUnit"]
-	path = ucode_update_mod/CustomProcessingUnit
+	path = ucode/CustomProcessingUnit
 	url = https://github.com/ceres-c/CustomProcessingUnit.git
