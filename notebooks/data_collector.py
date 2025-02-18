@@ -9,9 +9,9 @@ import time
 
 # Add the parent directory to the path so we can import the picocoder_py module
 sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
-import picocoder_py
-from picocoder_py import Picocoder, GlitchController, GlitchControllerTPS65094, GlitchResult, TargetType
-from picocoder_py import PowerSupply, KA3305P
+import picocoder_client
+from picocoder_client import Picocoder, GlitchController, GlitchControllerTPS65094, GlitchResult, TargetType
+from picocoder_client import PowerSupply, KA3305P
 
 GLITCHER_BAUD = 115200
 
@@ -212,14 +212,14 @@ def main(a: Namespace) -> int:
 		if resp.lower() != 'y' and resp.lower() != '':
 			return 1
 	else:
-		db.create_table(picocoder_py.target_from_opname(a.operation))
+		db.create_table(picocoder_client.target_from_opname(a.operation))
 
 	ps = KA3305P(port=a.power_supply_port, cycle_wait=0.5)
 	ps.con()
 	ps.power_cycle()
 
 	glitcher = Picocoder(a.glitcher_port, GLITCHER_BAUD)
-	glitcher.tc = picocoder_py.target_from_opname(a.operation)
+	glitcher.tc = picocoder_client.target_from_opname(a.operation)
 	if not glitcher.ping():
 		raise ConnectionError('Glitcher not responding')
 	if not glitcher.ping_target():
@@ -248,7 +248,7 @@ if __name__ == '__main__':
 	argparser = ArgumentParser(description='Simple script to run a glitch campaign and save results to a database')
 	argparser.add_argument('db_file', default='glitch_results.db', type=str, help='Database file name')
 	argparser.add_argument('db_table', type=str, help='Database table name (e.g. target commit hash) - Don\'t name it `; OR 1=1` please')
-	argparser.add_argument('operation', type=str, choices=picocoder_py.target_op_names(), help='The operation to glitch')
+	argparser.add_argument('operation', type=str, choices=picocoder_client.target_op_names(), help='The operation to glitch')
 	argparser.add_argument('--power-supply-port', default='/dev/ttyACM0', type=str, help='Power supply serial port (default /dev/ttyACM0)')
 	argparser.add_argument('--glitcher-port', default='/dev/ttyACM1', type=str, help='Glitcher serial port (default /dev/ttyACM1)')
 	argparser.add_argument('--ext-offset', nargs=3, type=int, metavar=('start', 'end', 'step'), help='External offset range', required=True)

@@ -4,3 +4,6 @@
 [submodule "ucode_update_mod/CustomProcessingUnit"]
 	path = ucode/CustomProcessingUnit
 	url = https://github.com/ceres-c/CustomProcessingUnit.git
+[submodule "firmware/coreboot"]
+	path = firmware/coreboot
+	url = git@github.com:ceres-c/coreboot
