@@ -171,7 +171,10 @@ class TargetRdrandLoopAdd(Target):
 		Filter function that determines whether a glitch attempt was successful.
 		'''
 		(summation, ) = from_target
-		return summation != 0x29FFFD
+		return summation != 0x29FFFD and summation < 0x52000000
+		# 0x52 is `R` in ASCII, when the pi pico misinterprets a new iteration of the loop
+		# as data, the return value will be something like 0x52XXYYZZ, where XXYYZZ is data
+		# from the next iteration of the loop.
 
 class TargetUcodeUpdate(Target):
 	'''
