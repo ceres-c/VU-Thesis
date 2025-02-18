@@ -4,7 +4,7 @@ Setup for the UP Squared board used as a target.
 
 ## Characteristics
 
-- Coreboot support ([dedicated page](https://doc.coreboot.org/mainboard/up/squared/index.html))
+- Coreboot support ([dedicated page](https://ceres-c.it/coreboot/mainboard/up/squared/index.html))
 - Intel Pentium N4200 (Apollo Lake SoC, Goldmont microarch)
 
 ## Components
