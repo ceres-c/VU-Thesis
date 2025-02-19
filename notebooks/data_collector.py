@@ -7,8 +7,6 @@ import sqlite3
 from sqlite3 import Error
 import time
 
-# Add the parent directory to the path so we can import the picocoder_py module
-sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
 import picocoder_client
 from picocoder_client import Picocoder, GlitchController, GlitchControllerTPS65094, GlitchResult, TargetType
 from picocoder_client import PowerSupply, KA3305P
