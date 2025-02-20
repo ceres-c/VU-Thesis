@@ -176,6 +176,28 @@ class TargetRdrandLoopAdd(Target):
 		# as data, the return value will be something like 0x52XXYYZZ, where XXYYZZ is data
 		# from the next iteration of the loop.
 
+class TargetRdrandURAM(Target):
+	'''
+	Target is running rdrand patched to perform
+	```
+	for (i = 0; i < 0x7FFFF; i++)
+		WRITEURAM(i, 0x0x48)
+		READURAM(TMP1, i)
+		rcx += TMP1
+	```
+	'''
+
+	op_name = 'rdrand-uram'
+	ret_vars = ['summation']
+	is_slow = True
+
+	def is_success(self, from_target: tuple) -> bool:
+		'''
+		Filter function that determines whether a glitch attempt was successful.
+		'''
+		(summation, ) = from_target
+		return summation != 0xFFFC0000 # 32-bit truncation of 0x1FFFFC0000=sum(0x7ffff)
+
 class TargetUcodeUpdate(Target):
 	'''
 	Target is running the ucode update procedure and returns the final ucode revision
@@ -218,8 +240,8 @@ class TargetUcodeUpdateTime(Target):
 
 TargetType: TypeAlias = Target | TargetCmp | TargetLoad | TargetMul | TargetReg | \
 			TargetRdrandSubAdd | TargetRdrandAdd | TargetRdrandAddMany | \
-			TargetRdrandMovRegs | TargetRdrandLoopAdd | TargetUcodeUpdate | \
-			TargetUcodeUpdateTime
+			TargetRdrandMovRegs | TargetRdrandLoopAdd | TargetRdrandURAM | \
+			TargetUcodeUpdate | TargetUcodeUpdateTime
 
 def target_op_names() -> list[str]:
 	'''
@@ -227,8 +249,8 @@ def target_op_names() -> list[str]:
 	'''
 	return [TargetMul.op_name, TargetLoad.op_name, TargetCmp.op_name, TargetReg.op_name, \
 		 	TargetRdrandSubAdd.op_name, TargetRdrandAdd.op_name, TargetRdrandAddMany.op_name, \
-			TargetRdrandMovRegs.op_name, TargetRdrandLoopAdd.op_name, TargetUcodeUpdate.op_name, \
-			TargetUcodeUpdateTime.op_name]
+			TargetRdrandMovRegs.op_name, TargetRdrandLoopAdd.op_name, TargetRdrandURAM.op_name, \
+			TargetUcodeUpdate.op_name, TargetUcodeUpdateTime.op_name]
 
 def target_from_opname(op_name: str) -> TargetType:
 	'''
@@ -252,6 +274,8 @@ def target_from_opname(op_name: str) -> TargetType:
 		return TargetRdrandMovRegs()
 	elif op_name == TargetRdrandLoopAdd.op_name:
 		return TargetRdrandLoopAdd()
+	elif op_name == TargetRdrandURAM.op_name:
+		return TargetRdrandURAM()
 	elif op_name == TargetUcodeUpdate.op_name:
 		return TargetUcodeUpdate()
 	elif op_name == TargetUcodeUpdateTime.op_name:
