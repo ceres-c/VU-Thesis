@@ -196,7 +196,32 @@ class TargetRdrandURAM(Target):
 		Filter function that determines whether a glitch attempt was successful.
 		'''
 		(summation, ) = from_target
-		return summation != 0xFFFC0000 # 32-bit truncation of 0x1FFFFC0000=sum(0x7ffff)
+		return summation != 0xFFFC0000 and (summation < 0x52000000 or summation > 0x53000000)
+		# 					^^^^^^^^^^
+		# 32-bit truncation of 0x1FFFFC0000=sum(0x7ffff)
+
+class TargetRdrandURAMCmpSet(Target):
+	'''
+	Target is running rdrand patched to perform
+	```
+	for (i = 0; i < 0x7FFFF; i++)
+		READURAM(TMP2, 0x48)
+		if (TMP2 != 0x5555)
+			return 1
+	return 0
+	```
+	'''
+
+	op_name = 'rdrand-uram_cmp_set'
+	ret_vars = ['success']
+	is_slow = True
+
+	def is_success(self, from_target: tuple) -> bool:
+		'''
+		Filter function that determines whether a glitch attempt was successful.
+		'''
+		(success, ) = from_target
+		return success == 1
 
 class TargetUcodeUpdate(Target):
 	'''
