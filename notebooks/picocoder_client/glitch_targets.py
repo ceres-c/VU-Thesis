@@ -266,7 +266,7 @@ class TargetUcodeUpdateTime(Target):
 TargetType: TypeAlias = Target | TargetCmp | TargetLoad | TargetMul | TargetReg | \
 			TargetRdrandSubAdd | TargetRdrandAdd | TargetRdrandAddMany | \
 			TargetRdrandMovRegs | TargetRdrandLoopAdd | TargetRdrandURAM | \
-			TargetUcodeUpdate | TargetUcodeUpdateTime
+			TargetRdrandURAMCmpSet | TargetUcodeUpdate | TargetUcodeUpdateTime
 
 def target_op_names() -> list[str]:
 	'''
@@ -275,7 +275,8 @@ def target_op_names() -> list[str]:
 	return [TargetMul.op_name, TargetLoad.op_name, TargetCmp.op_name, TargetReg.op_name, \
 		 	TargetRdrandSubAdd.op_name, TargetRdrandAdd.op_name, TargetRdrandAddMany.op_name, \
 			TargetRdrandMovRegs.op_name, TargetRdrandLoopAdd.op_name, TargetRdrandURAM.op_name, \
-			TargetUcodeUpdate.op_name, TargetUcodeUpdateTime.op_name]
+			TargetRdrandURAMCmpSet.op_name, TargetUcodeUpdate.op_name, \
+			TargetUcodeUpdateTime.op_name]
 
 def target_from_opname(op_name: str) -> TargetType:
 	'''
@@ -301,6 +302,8 @@ def target_from_opname(op_name: str) -> TargetType:
 		return TargetRdrandLoopAdd()
 	elif op_name == TargetRdrandURAM.op_name:
 		return TargetRdrandURAM()
+	elif op_name == TargetRdrandURAMCmpSet.op_name:
+		return TargetRdrandURAMCmpSet()
 	elif op_name == TargetUcodeUpdate.op_name:
 		return TargetUcodeUpdate()
 	elif op_name == TargetUcodeUpdateTime.op_name:
