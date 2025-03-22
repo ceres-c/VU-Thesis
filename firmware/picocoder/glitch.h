@@ -11,7 +11,7 @@
 #define TARGET_REACHABLE_US			9000 // The target sends a `R` every ~3-7,5ms, if after 9ms we haven't seen it, it's dead
 #define VOLT_TEST_TIMEOUT_US		6000 // 6ms timeout to receive all bytes in a voltage test (it normally takes ~5ms)
 #define PING_VCORE_STABLE_TIME_US	350000
-#define PING_VCORE_STABLE_CHARS		220
+#define PING_VCORE_STABLE_CHARS		5
 #define PING_VCORE_STABLE_CHARS_SLOW	1 // With ucode updates, it can take up to 6,6 us per cycle
 
 typedef struct glitch_s {
