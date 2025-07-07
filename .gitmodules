@@ -9,4 +9,4 @@
 	url = https://github.com/chip-red-pill/MicrocodeDecryptor.git
 [submodule "firmware/coreboot"]
 	path = firmware/coreboot
-	url = git@github.com:ceres-c/coreboot
+	url = https://github.com/ceres-c/coreboot.git
